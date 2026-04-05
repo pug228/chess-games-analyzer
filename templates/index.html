@@ -58,6 +58,58 @@
             border-radius: 10px; padding: 25px;
         }
         
+        .board-layout {
+            display: grid;
+            grid-template-columns: 1fr 160px;
+            gap: 15px;
+        }
+        @media (max-width: 700px) {
+            .board-layout { grid-template-columns: 1fr; }
+        }
+        
+        /* Move List */
+        .move-list {
+            max-height: 420px;
+            overflow-y: auto;
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .move-row {
+            display: flex;
+            align-items: center;
+            padding: 4px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .move-row:hover { background: rgba(255,255,255,0.1); }
+        .move-row.active { background: rgba(108, 99, 255, 0.3); }
+        .move-number {
+            color: #888;
+            min-width: 28px;
+            font-size: 12px;
+        }
+        .move-san {
+            min-width: 50px;
+            color: #fff;
+        }
+        .move-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+        .dot-brilliant { background: #2563eb; box-shadow: 0 0 6px #2563eb; }
+        .dot-excellent { background: #16a34a; box-shadow: 0 0 6px #16a34a; }
+        .dot-good { background: #65a30d; }
+        .dot-book { background: #7c3aed; }
+        .dot-inaccuracy { background: #d97706; }
+        .dot-mistake { background: #dc2626; }
+        .dot-blunder { background: #991b1b; box-shadow: 0 0 6px #991b1b; }
+        
         #gameInfo {
             text-align: center; margin-bottom: 15px;
             padding: 10px; background: #2a2a4a; border-radius: 5px;
@@ -191,12 +243,19 @@
                 <div id="gameInfo" style="display: none;">
                     <strong id="gameTitle"></strong>
                 </div>
-                <div id="board"></div>
-                <div class="move-controls">
-                    <button class="btn-move" id="startBtn" title="Start">⏮</button>
-                    <button class="btn-move" id="prevBtn" title="Previous">◀</button>
-                    <button class="btn-move" id="nextBtn" title="Next">▶</button>
-                    <button class="btn-move" id="endBtn" title="End">⏭</button>
+                <div class="board-layout">
+                    <div>
+                        <div id="board"></div>
+                        <div class="move-controls">
+                            <button class="btn-move" id="startBtn" title="Start">⏮</button>
+                            <button class="btn-move" id="prevBtn" title="Previous">◀</button>
+                            <button class="btn-move" id="nextBtn" title="Next">▶</button>
+                            <button class="btn-move" id="endBtn" title="End">⏭</button>
+                        </div>
+                    </div>
+                    <div class="move-list" id="moveList">
+                        <!-- Moves rendered here -->
+                    </div>
                 </div>
                 <div class="move-info" id="moveInfo">Use controls to navigate</div>
             </div>
@@ -281,6 +340,7 @@
         const gameInfo = $('gameInfo');
         const gameTitle = $('gameTitle');
         const gameUrlInput = $('gameUrl');
+        const moveListEl = $('moveList');
         
         function showError(msg) {
             errorMessage.textContent = msg;
@@ -295,6 +355,48 @@
             $('endBtn').disabled = currentMoveIndex >= moves.length - 1;
         }
         
+        function renderMoveList() {
+            if (!moveListEl || !moves.length) {
+                if (moveListEl) moveListEl.innerHTML = '<div style="color:#666;padding:10px;">No moves</div>';
+                return;
+            }
+            
+            let html = '';
+            for (let i = 0; i < moves.length; i += 2) {
+                const moveNum = Math.floor(i / 2) + 1;
+                const eval1 = evaluations[i] || {};
+                const eval2 = evaluations[i + 1] || {};
+                const cat1 = eval1.category || '';
+                const cat2 = eval2.category || '';
+                
+                html += '<div style="display:flex;align-items:center;padding:2px 4px;">';
+                html += `<span class="move-number">${moveNum}.</span>`;
+                
+                // White move
+                const isActive1 = i === currentMoveIndex;
+                html += `<span class="move-row ${isActive1 ? 'active' : ''}" onclick="window.goToMove(${i})" style="padding:2px 4px;flex:1;">`;
+                html += `<span class="move-san">${moves[i].san}</span>`;
+                if (cat1) html += `<span class="move-dot dot-${cat1}"></span>`;
+                html += '</span>';
+                
+                // Black move
+                if (moves[i + 1]) {
+                    const isActive2 = i + 1 === currentMoveIndex;
+                    html += `<span class="move-row ${isActive2 ? 'active' : ''}" onclick="window.goToMove(${i + 1})" style="padding:2px 4px;flex:1;">`;
+                    html += `<span class="move-san">${moves[i + 1].san}</span>`;
+                    if (cat2) html += `<span class="move-dot dot-${cat2}"></span>`;
+                    html += '</span>';
+                }
+                
+                html += '</div>';
+            }
+            moveListEl.innerHTML = html;
+            
+            // Scroll to active move
+            const activeEl = moveListEl.querySelector('.move-row.active');
+            if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+        
         function updateMoveInfo() {
             if (currentMoveIndex < 0) {
                 moveInfo.innerHTML = 'Starting position';
@@ -306,18 +408,24 @@
             
             let html = `<div>${side} (${moveNum}): <strong>${move.san}</strong></div>`;
             
-            // Show Stockfish evaluation if available
             const eval_ = evaluations[currentMoveIndex];
             if (eval_) {
                 const cat = eval_.category;
                 const reason = eval_.reason;
                 const score = eval_.score || '';
+                const bestMove = eval_.best_move;
+                
                 html += `<div style="margin-top:6px;">
                     <span class="eval-badge eval-${cat}">${cat}</span>
                     ${score ? `<span style="margin-left:8px;font-size:0.85rem;color:#a0a0a0;">⚖ ${score}</span>` : ''}
                 </div>`;
+                
                 if (reason) {
                     html += `<div class="eval-reason">${reason}</div>`;
+                }
+                
+                if (bestMove && (cat === 'blunder' || cat === 'mistake' || cat === 'inaccuracy')) {
+                    html += `<div style="margin-top:4px;font-size:0.85rem;color:#6c63ff;">💡 Better: <strong>${bestMove}</strong></div>`;
                 }
             }
             
@@ -329,6 +437,7 @@
             renderBoard(startFen);
             updateMoveInfo();
             updateControls();
+            renderMoveList();
         }
         
         function goToPrev() {
@@ -338,6 +447,7 @@
                 renderBoard(fen);
                 updateMoveInfo();
                 updateControls();
+                renderMoveList();
             }
         }
         
@@ -347,6 +457,7 @@
                 renderBoard(moves[currentMoveIndex].fen);
                 updateMoveInfo();
                 updateControls();
+                renderMoveList();
             }
         }
         
@@ -356,8 +467,19 @@
                 renderBoard(moves[currentMoveIndex].fen);
                 updateMoveInfo();
                 updateControls();
+                renderMoveList();
             }
         }
+        
+        // Make goToMove available globally for onclick
+        window.goToMove = function(index) {
+            if (index < 0 || index >= moves.length) return;
+            currentMoveIndex = index;
+            renderBoard(moves[index].fen);
+            updateMoveInfo();
+            updateControls();
+            renderMoveList();
+        };
         
         // Event listeners
         $('startBtn').addEventListener('click', goToStart);
@@ -397,12 +519,14 @@
                 evaluations = data.evaluations || [];
                 currentMoveIndex = -1;
                 renderBoard(startFen);
+                renderMoveList();
                 
                 const meta = data.metadata || {};
                 gameTitle.textContent = `${meta.white || '?'} (${meta.white_elo || '?'}) vs ${meta.black || '?'} (${meta.black_elo || '?'}) - ${meta.result || '?'}`;
                 gameInfo.style.display = 'block';
                 
                 analysisContent.innerHTML = formatAnalysis(data.analysis);
+                console.log('Analysis type:', typeof data.analysis, 'Value:', data.analysis);
                 
                 loading.classList.remove('active');
                 mainContent.style.display = 'grid';
@@ -419,11 +543,15 @@
         });
         
         function formatAnalysis(text) {
-            return text.split('\n').map(line => {
-                if (line.startsWith('# ')) return `<h3>${line.substring(2)}</h3>`;
-                if (line.startsWith('## ')) return `<h4>${line.substring(3)}</h4>`;
-                if (line.startsWith('- ') || line.startsWith('* ')) return `<div style="margin-left:20px;">• ${line.substring(2)}</div>`;
-                if (/^\d+\./.test(line)) return `<strong>${line}</strong>`;
+            if (text === null || text === undefined || text === '') {
+                return '<em style="color:#888;">No LLM analysis available. Stockfish evaluations are shown below the board.</em>';
+            }
+            var str = String(text);
+            return str.split('\n').map(function(line) {
+                if (line.indexOf('# ') === 0) return '<h3>' + line.substring(2) + '</h3>';
+                if (line.indexOf('## ') === 0) return '<h4>' + line.substring(3) + '</h4>';
+                if (line.indexOf('- ') === 0 || line.indexOf('* ') === 0) return '<div style="margin-left:20px;">\u2022 ' + line.substring(2) + '</div>';
+                if (/^\d+\./.test(line)) return '<strong>' + line + '</strong>';
                 if (line.trim() === '') return '<br>';
                 return line;
             }).join('\n');

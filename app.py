@@ -352,28 +352,35 @@ def evaluate_with_stockfish(pgn, time_limit=0.5):
                 else:
                     best_cp = pov_score.score()
                 
+                # Convert best_move to SAN BEFORE pushing
+                try:
+                    best_san = board.san(best_move)
+                except Exception:
+                    best_san = str(best_move)
+
+                # Analyze what the move does (captures, checks, material loss)
+                move_detail = _analyze_move(board, move, best_move)
+
                 board.push(move)
-                
+
                 result2 = engine.analyse(board, chess.engine.Limit(time=time_limit))
                 pov_score2 = result2["score"].pov(side_to_move)
                 if pov_score2.is_mate():
                     actual_cp = 10000 if pov_score2.mate() > 0 else -10000
                 else:
                     actual_cp = pov_score2.score()
-                
-                # Cap cp_loss at 500 for meaningful classification
-                # (beyond that, position is already completely lost)
+
                 cp_loss = min(500, max(0, best_cp - actual_cp))
-                
-                # Classify the move
+
                 is_book = board.fullmove_number <= 10 and cp_loss < 20
-                category, reason = _classify_move(cp_loss, board.turn, move, best_move, is_book)
+                category, reason = _classify_move(cp_loss, board.turn, move, best_move, is_book, best_cp, actual_cp, move_detail)
                 
                 evaluations.append({
                     "category": category,
                     "reason": reason,
                     "cp_loss": cp_loss,
-                    "score": _format_score(result2["score"])
+                    "score": _format_score(result2["score"]),
+                    "best_move": best_san if cp_loss > 50 else None
                 })
         
         logging.info(f"Generated {len(evaluations)} evaluations")
@@ -422,26 +429,249 @@ def _calc_centipawn_loss(board, before_score, after_score):
     return loss
 
 
-def _classify_move(cp_loss, turn, move, best_move, is_book):
-    """Classify a move based on centipawn loss."""
+def _analyze_move(board, move, best_move):
+    """
+    Analyze a move to understand what happened.
+    Returns a dict with tactical and positional details.
+    """
+    detail = {
+        "is_capture": board.is_capture(move),
+        "is_check": False,
+        "is_checkmate": False,
+        "piece_moved": board.piece_at(move.from_square),
+        "captured_piece": board.piece_at(move.to_square),
+        "best_was_capture": board.is_capture(best_move),
+        "tactic": None,
+        "reason": None,
+    }
+
+    # Check if move gives check
+    board.push(move)
+    detail["is_check"] = board.is_check()
+    detail["is_checkmate"] = board.is_checkmate()
+    board.pop()
+
+    piece_type = detail["piece_moved"].piece_type if detail["piece_moved"] else None
+    captured_type = detail["captured_piece"].piece_type if detail["captured_piece"] else None
+    detail["piece_name"] = _piece_name(piece_type) if piece_type else "?"
+    detail["captured_name"] = _piece_name(captured_type) if captured_type else None
+
+    # Compare material balance: before vs after played move vs after best move
+    material_before = _count_material(board)
+    
+    # Material after played move
+    board.push(move)
+    material_after = _count_material(board)
+    
+    # Material after best move (undo first, play best, count)
+    board.pop()
+    board.push(best_move)
+    material_best = _count_material(board)
+    board.pop()
+    
+    material_change = material_after - material_before  # negative = lost material
+    material_vs_best = material_after - material_best  # positive = best move kept more material
+
+    detail["material_change"] = material_change
+    detail["material_vs_best"] = material_vs_best
+
+    # Determine tactic and reason
+    if detail["is_checkmate"]:
+        detail["tactic"] = "checkmate"
+        detail["reason"] = "Delivers checkmate!"
+    elif detail["is_capture"] and not detail["best_was_capture"]:
+        if captured_type == chess.QUEEN:
+            detail["tactic"] = "won the queen"
+            detail["reason"] = "Captures the queen"
+        elif piece_type == chess.QUEEN:
+            detail["tactic"] = "lost the queen"
+            detail["reason"] = "Gave away the queen for a cheap piece"
+        elif material_vs_best < -200:
+            detail["tactic"] = "bad capture"
+            detail["reason"] = f"Taking the {_piece_name(captured_type)} allows a devastating reply"
+        else:
+            detail["tactic"] = "unnecessary capture"
+            detail["reason"] = f"Taking the {_piece_name(captured_type)} weakens the position"
+    elif detail["best_was_capture"] and not detail["is_capture"]:
+        detail["tactic"] = "missed capture"
+        if captured_type:
+            detail["reason"] = f"Missed capturing the {_piece_name(captured_type)}"
+        elif material_vs_best > 100:
+            detail["reason"] = "Missed winning material"
+        else:
+            detail["reason"] = "Missed a tactical opportunity"
+    elif piece_type == chess.QUEEN and material_change < -500:
+        detail["tactic"] = "lost the queen"
+        detail["reason"] = "Blundered the queen"
+    elif material_vs_best < -800:
+        lost = _what_was_lost(board, move, best_move, material_change)
+        detail["tactic"] = "blunder"
+        detail["reason"] = f"Blundered {lost}"
+    elif material_vs_best < -300:
+        lost = _what_was_lost(board, move, best_move, material_change)
+        detail["tactic"] = "mistake"
+        detail["reason"] = f"Lost {lost}" if lost else "Made a serious positional error"
+    elif material_vs_best < -100:
+        detail["tactic"] = "weakens position"
+        if material_change < 0:
+            lost = _what_was_lost(board, move, best_move, material_change)
+            detail["reason"] = f"Lost {lost}" if lost else "Weakened the position"
+        else:
+            detail["reason"] = "Created a weakness in the position"
+    elif captured_type and piece_type and piece_type != chess.KING:
+        if captured_type > piece_type:
+            detail["tactic"] = "good exchange"
+            detail["reason"] = f"Good exchange (took {_piece_name(captured_type)} for {_piece_name(piece_type)})"
+        elif piece_type > captured_type:
+            detail["tactic"] = "bad exchange"
+            detail["reason"] = f"Bad exchange (lost {_piece_name(piece_type)} for {_piece_name(captured_type)})"
+        else:
+            detail["tactic"] = "even exchange"
+            detail["reason"] = "Even material exchange"
+    
+    # Default reason if still none
+    if not detail["reason"]:
+        if detail["is_check"]:
+            detail["reason"] = "Delivers check"
+        elif material_change < 0:
+            detail["reason"] = "Lost material"
+        # For quiet moves that are bad: the position is strategically lost
+        elif material_vs_best < -300:
+            detail["reason"] = "Allows a devastating tactical reply"
+        elif material_vs_best < -100:
+            detail["reason"] = "Creates a serious weakness"
+        elif piece_type == chess.KNIGHT:
+            detail["reason"] = "Knight move"
+        elif piece_type == chess.BISHOP:
+            detail["reason"] = "Bishop move"
+        elif piece_type == chess.ROOK:
+            detail["reason"] = "Rook move"
+        else:
+            detail["reason"] = f"{detail['piece_name'].capitalize()} move"
+
+    return detail
+
+
+def _count_material(board):
+    """Count material balance (positive = white advantage, negative = black)."""
+    piece_values = {chess.PAWN: 100, chess.KNIGHT: 320, chess.BISHOP: 330, 
+                    chess.ROOK: 500, chess.QUEEN: 900, chess.KING: 0}
+    total = 0
+    for sq in chess.SQUARES:
+        piece = board.piece_at(sq)
+        if piece:
+            val = piece_values.get(piece.piece_type, 0)
+            if piece.color == chess.WHITE:
+                total += val
+            else:
+                total -= val
+    return total
+
+
+def _what_was_lost(board, move, best_move, material_change):
+    """Determine what piece was lost due to the bad move."""
+    piece_type = board.piece_at(move.from_square)
+    
+    # If material was lost, identify what
+    if material_change < -200:
+        if piece_type and piece_type.piece_type == chess.QUEEN:
+            return "the queen"
+        if piece_type and piece_type.piece_type == chess.ROOK:
+            return "a rook"
+        if piece_type and piece_type.piece_type == chess.BISHOP:
+            return "a bishop"
+        if piece_type and piece_type.piece_type == chess.KNIGHT:
+            return "a knight"
+        # Check what the opponent can now capture
+        # Look at squares the moved piece now attacks
+        if piece_type:
+            return f"significant material ({_piece_name(piece_type.piece_type)})"
+    return None
+
+
+def _piece_name(piece_type):
+    """Get piece name in English."""
+    names = {
+        chess.PAWN: "pawn",
+        chess.KNIGHT: "knight",
+        chess.BISHOP: "bishop",
+        chess.ROOK: "rook",
+        chess.QUEEN: "queen",
+        chess.KING: "king",
+    }
+    return names.get(piece_type, "?")
+
+
+def _classify_move(cp_loss, turn, move, best_move, is_book, best_cp, actual_cp, detail):
+    """Classify a move with specific human-friendly explanations."""
+    tactic = detail.get("tactic")
+    is_capture = detail.get("is_capture", False)
+    is_check = detail.get("is_check", False)
+    piece = detail.get("piece_name", "?")
+    captured = detail.get("captured_name")
+    reason = detail.get("reason", "")
+    material_change = detail.get("material_change", 0)
+    material_vs_best = detail.get("material_vs_best", 0)
+    missed_capture = detail.get("best_was_capture", False) and not is_capture
+    
+    # Mate situations
+    if actual_cp < -5000 and best_cp > 5000:
+        return "blunder", "Missed a forced checkmate"
+    if best_cp >= 9000:
+        return "excellent", "Found the winning continuation"
+    
     if is_book:
-        return "book", f"Standard opening theory move"
+        return "book", "Standard opening theory move"
     
     if move == best_move and cp_loss < 5:
-        return "excellent", "Best move according to engine"
+        return "excellent", "Best move"
+    
+    # For non-tactical blunders (no material lost but position is lost)
+    is_positional_blunder = (abs(material_change) < 50 and abs(material_vs_best) < 50 and cp_loss > 200)
+    
+    if is_positional_blunder:
+        if cp_loss > 400:
+            return "blunder", "Allows a devastating tactical combination"
+        else:
+            return "mistake", "Allows a strong tactical reply"
+    
+    # Use the pre-computed reason from _analyze_move, refine based on severity
+    base_reason = reason if reason else f"{piece.capitalize()} move"
     
     if cp_loss <= 15:
-        return "excellent", f"Very strong move (loss: {cp_loss}cp)"
+        return "excellent", f"Strong move" + (f" ({base_reason.lower()})" if base_reason else "")
     elif cp_loss <= 50:
-        return "good", f"Solid move (loss: {cp_loss}cp)"
+        return "good", f"Solid move" + (f" ({base_reason.lower()})" if base_reason else "")
     elif cp_loss <= 100:
-        return "inaccuracy", f"Slightly suboptimal, better alternatives exist (loss: {cp_loss}cp)"
+        if missed_capture and captured:
+            return "inaccuracy", f"Missed capturing the {captured}"
+        if tactic == "unnecessary capture":
+            return "inaccuracy", f"Unnecessary capture — better positional moves exist"
+        if tactic == "weakens position":
+            return "inaccuracy", f"Weakened the position — better alternatives exist"
+        return "inaccuracy", f"Slightly suboptimal — {base_reason.lower()}"
     elif cp_loss <= 250:
-        return "mistake", f"Significant error, could be punished (loss: {cp_loss}cp)"
-    elif cp_loss <= 500:
-        return "blunder", f"Major error, likely losing material or position (loss: {cp_loss}cp)"
-    else:
-        return "blunder", f"Critical blunder, position severely damaged (loss: {cp_loss}cp)"
+        if tactic == "blunder" or (material_vs_best < -300):
+            return "blunder", f"Blundered {base_reason.lower()}" if base_reason else "Blunder — severely weakens the position"
+        if missed_capture and captured:
+            return "mistake", f"Missed capturing the {captured} — free material"
+        if tactic == "missed capture":
+            return "mistake", f"Missed tactical opportunity — {base_reason.lower()}"
+        if is_capture and captured:
+            return "mistake", f"Bad capture of the {captured} — allows a strong reply"
+        return "mistake", f"Error — {base_reason.lower()}"
+    else:  # cp_loss > 250
+        if tactic == "lost the queen" or (material_change < -800 and "queen" in str(base_reason).lower()):
+            return "blunder", "Blundered the queen — major material loss"
+        if tactic == "blunder" or material_vs_best < -800:
+            return "blunder", f"Blundered {base_reason.lower()}"
+        if missed_capture and captured:
+            return "blunder", f"Missed winning the {captured}"
+        if is_capture and captured:
+            return "blunder", f"Disastrous capture — fatally weakens the position"
+        if actual_cp < -3000:
+            return "blunder", "Loses on the spot — position becomes completely lost"
+        return "blunder", f"Major blunder — {base_reason.lower()}"
 
 
 def _format_score(score):
@@ -484,8 +714,9 @@ def analyze():
         
         # Use LLM for commentary on critical moments only
         analysis_text = ""
+        llm_evals = []
         try:
-            analysis_text = _analyze_with_llm(pgn, metadata)
+            analysis_text, llm_evals = _analyze_with_llm(pgn, metadata)
         except Exception as e:
             pass  # Continue without LLM analysis if it fails
         
