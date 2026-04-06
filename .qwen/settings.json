@@ -92,7 +92,8 @@
       "Bash(engine_path)",
       "Bash(result *)",
       "Bash(engine.quit)",
-      "Bash(which *)"
+      "Bash(which *)",
+      "Bash(cp *)"
     ]
   },
   "$version": 3

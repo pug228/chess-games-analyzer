@@ -6,11 +6,14 @@
 
 ## 📸 Demo
 
-*Replace the placeholder below with actual screenshots after running the app.*
+### Board Analysis — Dark Mode
+![Board & Analysis](docs/screenshots/board.png)
 
-| Board & Analysis | Move List & Evaluation Bar | Light Mode |
-|------------------|----------------------------|------------|
-| ![Board](docs/screenshots/board.png) | ![Eval Bar](docs/screenshots/eval-bar.png) | ![Light](docs/screenshots/light-mode.png) |
+### Evaluation Bar & Move List
+![Evaluation Bar](docs/screenshots/eval-bar.png)
+
+### Light Mode
+![Light Mode](docs/screenshots/light-mode.png)
 
 ---
 
