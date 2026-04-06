@@ -9,6 +9,7 @@ import chess.engine
 import chess.pgn
 import io
 import os
+import database as db
 
 app = Flask(__name__)
 
@@ -638,6 +639,7 @@ def index():
 def analyze_stream():
     """SSE endpoint for real-time analysis progress."""
     url = request.args.get("url", "").strip()
+    session_id = request.args.get("session", "anonymous")
     
     if not url or "chess.com/game/" not in url:
         return Response('data: {"step":"error","error":"Invalid chess.com URL"}\n\n',
@@ -692,6 +694,13 @@ def analyze_stream():
                             })
                 except Exception:
                     pass
+
+                # Save to database
+                try:
+                    db.save_analysis(session_id, url, game_id, metadata, pgn,
+                                    analysis_text, evaluations, board_positions)
+                except Exception as e:
+                    pass  # Non-critical
 
                 q.put({"step": "done", "progress": 100, "data": {
                     "pgn": pgn,
@@ -796,6 +805,38 @@ def export_pgn():
         )
     except Exception as e:
         return jsonify({"error": f"Failed to export PGN: {str(e)}"}), 500
+
+
+@app.route("/history")
+def history_page():
+    """History page - lists all saved analyses for this session."""
+    return render_template("history.html")
+
+
+@app.route("/api/history", methods=["GET"])
+def history_list():
+    """Get all analyses for current session."""
+    session_id = request.args.get("session", "anonymous")
+    analyses = db.get_session_analyses(session_id)
+    return jsonify(analyses)
+
+
+@app.route("/api/history/<int:analysis_id>", methods=["GET"])
+def history_detail(analysis_id):
+    """Get a single analysis by ID."""
+    session_id = request.args.get("session", "anonymous")
+    analysis = db.get_analysis(analysis_id, session_id)
+    if not analysis:
+        return jsonify({"error": "Analysis not found"}), 404
+    return jsonify(analysis)
+
+
+@app.route("/api/history/<int:analysis_id>", methods=["DELETE"])
+def history_delete(analysis_id):
+    """Delete an analysis."""
+    session_id = request.args.get("session", "anonymous")
+    db.delete_analysis(analysis_id, session_id)
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

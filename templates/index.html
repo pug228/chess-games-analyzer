@@ -63,6 +63,68 @@
             background: #ddd;
         }
         
+        /* Light mode table styles */
+        body.light-mode .move-row.active {
+            background: rgba(108, 99, 255, 0.15);
+        }
+        body.light-mode .move-row:hover {
+            background: rgba(0,0,0,0.05);
+        }
+        body.light-mode .move-san {
+            color: #1a1a2e;
+        }
+        body.light-mode .move-number {
+            color: #888;
+        }
+        
+        /* Analysis table styles (dark mode defaults) */
+        .analysis-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .analysis-table-header {
+            background: #6c63ff;
+            color: #fff;
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+            border: 1px solid #5a53de;
+        }
+        .table-row-alt {
+            background: #1a1a2e;
+        }
+        .table-row-even {
+            background: #222244;
+        }
+        .analysis-table-cell {
+            padding: 8px 10px;
+            border: 1px solid #3a3a5c;
+            vertical-align: top;
+        }
+        
+        /* Light mode analysis table */
+        body.light-mode .table-row-alt {
+            background: #f5f5f5 !important;
+        }
+        body.light-mode .table-row-even {
+            background: #ffffff !important;
+        }
+        body.light-mode .analysis-table-cell {
+            border-color: #ddd !important;
+        }
+        body.light-mode .analysis-table-header {
+            background: #5a53de !important;
+        }
+        
+        .nav-link {
+            display: inline-block; color: #6c63ff; text-decoration: none;
+            font-size: 0.9rem; padding: 4px 12px; border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .nav-link:hover { background: rgba(255,255,255,0.1); }
+        body.light-mode .nav-link:hover { background: rgba(0,0,0,0.08); }
+        
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
         
         header { text-align: center; padding: 30px 0; }
@@ -385,6 +447,7 @@
         <header>
             <h1>♟️ Chess Game Analyzer</h1>
             <p>Paste a chess.com game URL and get AI-powered analysis</p>
+            <a href="/history" class="nav-link" id="historyLink">📜 My Analyses</a>
             <div id="openingInfo" style="display:none;">
                 <span id="openingName"></span>
                 <span id="openingEco"></span>
@@ -650,6 +713,55 @@
         const evalBarEl = $('evalBar');
         const evalBarWhite = $('evalBarWhite');
         const evalLabelEl = $('evalLabel');
+        
+        // Session ID (persistent)
+        var sessionId = localStorage.getItem('chess-analyzer-session');
+        if (!sessionId) {
+            sessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+            localStorage.setItem('chess-analyzer-session', sessionId);
+        }
+        
+        // Check for saved analysis in URL (?analysis=ID)
+        var loadAnalysisId = null;
+        var urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('analysis')) {
+            loadAnalysisId = parseInt(urlParams.get('analysis'));
+        }
+        
+        if (loadAnalysisId) {
+            // Load saved analysis
+            loading.classList.add('active');
+            fetch('/api/history/' + loadAnalysisId + '?session=' + encodeURIComponent(sessionId))
+                .then(function(res) { if (!res.ok) throw new Error('Not found'); return res.json(); })
+                .then(function(data) {
+                    loading.classList.remove('active');
+                    mainContent.style.display = 'grid';
+                    statusMessage.style.display = 'none';
+                    moves = data.moves || [];
+                    evaluations = (data.evaluations_json && typeof data.evaluations_json === 'string')
+                        ? JSON.parse(data.evaluations_json)
+                        : (data.evaluations || []);
+                    currentPgn = data.pgn || '';
+                    currentMoveIndex = -1;
+                    renderBoard(startFen);
+                    renderMoveList();
+                    updateEvalBar();
+                    if ($('downloadBtn')) $('downloadBtn').style.display = 'block';
+                    var meta = {
+                        white: data.white, black: data.black, result: data.result,
+                        white_elo: data.white_elo, black_elo: data.black_elo, eco: data.eco, eco_url: ''
+                    };
+                    gameTitle.textContent = (meta.white || '?') + ' (' + (meta.white_elo || '?') + ') vs ' + (meta.black || '?') + ' (' + (meta.black_elo || '?') + ') - ' + (meta.result || '?');
+                    gameInfo.style.display = 'block';
+                    analysisContent.innerHTML = formatAnalysis(data.analysis);
+                    updateMoveInfo();
+                    updateControls();
+                })
+                .catch(function() {
+                    loading.classList.remove('active');
+                    showError('Analysis not found or expired');
+                });
+        }
         
         function showError(msg) {
             errorMessage.textContent = msg;
@@ -919,7 +1031,8 @@
             if (progressFill) progressFill.style.width = '0%';
 
             // Use SSE for real-time progress
-            var evtSource = new EventSource('/api/analyze-stream?url=' + encodeURIComponent(url));
+            var sessionId = localStorage.getItem('chess-analyzer-session');
+            var evtSource = new EventSource('/api/analyze-stream?url=' + encodeURIComponent(url) + '&session=' + encodeURIComponent(sessionId));
 
             evtSource.onmessage = function(e) {
                 var msg;
@@ -1320,23 +1433,23 @@
             
             if (rows.length === 0) return '';
             
-            // Build HTML table
-            var tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+            // Build HTML table with CSS classes (no inline backgrounds) for theme support
+            var tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table class="analysis-table" style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
             
             // Header row
             tableHtml += '<thead><tr>';
             for (var j = 0; j < rows[0].length; j++) {
-                tableHtml += '<th style="background:#6c63ff;color:#fff;padding:8px 10px;text-align:left;font-weight:600;border:1px solid #5a53de;">' + rows[0][j] + '</th>';
+                tableHtml += '<th class="analysis-table-header">' + rows[0][j] + '</th>';
             }
             tableHtml += '</tr></thead>';
             
             // Body rows
             tableHtml += '<tbody>';
             for (var r = 1; r < rows.length; r++) {
-                var bg = r % 2 === 0 ? '#1a1a2e' : '#222244';
-                tableHtml += '<tr style="background:' + bg + ';">';
+                var bgClass = r % 2 === 0 ? 'table-row-alt' : 'table-row-even';
+                tableHtml += '<tr class="' + bgClass + '">';
                 for (var j = 0; j < rows[r].length; j++) {
-                    tableHtml += '<td style="padding:8px 10px;border:1px solid #3a3a5c;vertical-align:top;">' + rows[r][j] + '</td>';
+                    tableHtml += '<td class="analysis-table-cell">' + rows[r][j] + '</td>';
                 }
                 tableHtml += '</tr>';
             }

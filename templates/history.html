@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis History - Chess Game Analyzer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            transition: background 0.3s, color 0.3s;
+        }
+        body.light-mode {
+            background: linear-gradient(135deg, #f0f2f5 0%, #e2e6ea 100%);
+            color: #1a1a2e;
+        }
+        .theme-toggle {
+            position: fixed; top: 15px; right: 15px;
+            width: 40px; height: 40px; border-radius: 50%;
+            border: none; cursor: pointer;
+            background: #2a2a4a; color: #fff;
+            font-size: 18px; display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s; z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        body.light-mode .theme-toggle {
+            background: #fff; color: #1a1a2e;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        header { text-align: center; padding: 30px 0 20px; }
+        header h1 { font-size: 2rem; color: #fff; }
+        header p { color: #a0a0a0; margin-top: 8px; }
+        body.light-mode header h1 { color: #1a1a2e; }
+        body.light-mode header p { color: #666; }
+        
+        .nav-link {
+            display: inline-block; margin-bottom: 20px;
+            color: #6c63ff; text-decoration: none;
+            padding: 8px 16px; border-radius: 6px;
+            background: rgba(255,255,255,0.05);
+            transition: background 0.2s;
+        }
+        .nav-link:hover { background: rgba(255,255,255,0.1); }
+        body.light-mode .nav-link { background: rgba(0,0,0,0.05); }
+        
+        .history-list { list-style: none; }
+        .history-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px; padding: 16px;
+            margin-bottom: 12px;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; flex-wrap: wrap;
+            transition: background 0.2s;
+        }
+        .history-item:hover { background: rgba(255,255,255,0.08); }
+        body.light-mode .history-item { background: rgba(0,0,0,0.04); }
+        body.light-mode .history-item:hover { background: rgba(0,0,0,0.07); }
+        
+        .item-info { flex: 1; min-width: 200px; }
+        .item-players { font-weight: 600; font-size: 1.05rem; }
+        .item-result { color: #a0a0a0; font-size: 0.9rem; margin-top: 4px; }
+        .item-date { color: #666; font-size: 0.8rem; margin-top: 2px; }
+        body.light-mode .item-result { color: #666; }
+        body.light-mode .item-date { color: #999; }
+        
+        .item-actions { display: flex; gap: 8px; }
+        .btn-view, .btn-delete {
+            padding: 8px 16px; border: none; border-radius: 5px;
+            cursor: pointer; font-size: 0.85rem; font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-view { background: #6c63ff; color: #fff; }
+        .btn-view:hover { background: #5a53de; }
+        .btn-delete { background: #3a3a5c; color: #ff6b6b; }
+        .btn-delete:hover { background: #4a2a2a; }
+        
+        .empty-state {
+            text-align: center; padding: 60px 20px;
+            color: #888;
+        }
+        .empty-state p { font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <button class="theme-toggle" id="themeToggle">🌙</button>
+        <header>
+            <h1>📜 Analysis History</h1>
+            <p>Your saved chess game analyses</p>
+        </header>
+        
+        <a href="/" class="nav-link">← Back to Analyzer</a>
+        
+        <ul class="history-list" id="historyList">
+            <li class="empty-state" id="emptyState">
+                <p>No saved analyses yet</p>
+            </li>
+        </ul>
+    </div>
+    
+    <script>
+    var $ = function(id) { return document.getElementById(id); };
+    var sessionId = localStorage.getItem('chess-analyzer-session') || generateSessionId();
+    localStorage.setItem('chess-analyzer-session', sessionId);
+    
+    // Theme
+    var savedTheme = localStorage.getItem('chess-analyzer-theme');
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-mode');
+        $('themeToggle').textContent = '☀️';
+    }
+    $('themeToggle').addEventListener('click', function() {
+        document.body.classList.toggle('light-mode');
+        var isLight = document.body.classList.contains('light-mode');
+        $('themeToggle').textContent = isLight ? '☀️' : '🌙';
+        localStorage.setItem('chess-analyzer-theme', isLight ? 'light' : 'dark');
+    });
+    
+    function generateSessionId() {
+        return 'sess_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+    }
+    
+    // Load history
+    fetch('/api/history?session=' + encodeURIComponent(sessionId))
+        .then(function(res) { return res.json(); })
+        .then(function(analyses) {
+            if (analyses.length === 0) {
+                $('emptyState').style.display = 'block';
+                return;
+            }
+            $('emptyState').style.display = 'none';
+            analyses.forEach(function(a) {
+                var li = document.createElement('li');
+                li.className = 'history-item';
+                var white = a.white || '?';
+                var black = a.black || '?';
+                var whiteElo = a.white_elo || '?';
+                var blackElo = a.black_elo || '?';
+                var result = a.result || '?';
+                var date = a.created_at ? a.created_at.substring(0, 19).replace('T', ' ') : '';
+                
+                li.innerHTML =
+                    '<div class="item-info">' +
+                        '<div class="item-players">' + white + ' (' + whiteElo + ') vs ' + black + ' (' + blackElo + ')</div>' +
+                        '<div class="item-result">' + result + '</div>' +
+                        '<div class="item-date">' + date + '</div>' +
+                    '</div>' +
+                    '<div class="item-actions">' +
+                        '<button class="btn-view" onclick="viewAnalysis(' + a.id + ')">View</button>' +
+                        '<button class="btn-delete" onclick="deleteAnalysis(' + a.id + ', this)">Delete</button>' +
+                    '</div>';
+                $('historyList').appendChild(li);
+            });
+        })
+        .catch(function(err) {
+            console.error('Failed to load history:', err);
+        });
+    
+    window.viewAnalysis = function(id) {
+        window.location.href = '/?analysis=' + id;
+    };
+    
+    window.deleteAnalysis = function(id, btn) {
+        if (!confirm('Delete this analysis?')) return;
+        fetch('/api/history/' + id + '?session=' + encodeURIComponent(sessionId), { method: 'DELETE' })
+            .then(function(res) { return res.json(); })
+            .then(function() {
+                btn.closest('.history-item').remove();
+                if ($('historyList').querySelector('.history-item') === null) {
+                    $('emptyState').style.display = 'block';
+                }
+            })
+            .catch(function() { alert('Failed to delete'); });
+    };
+    </script>
+</body>
+</html>

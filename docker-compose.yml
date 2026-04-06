@@ -7,4 +7,10 @@ services:
       - "5000:5000"
     volumes:
       - .:/app
+      - analysis-data:/app/data
+    environment:
+      - ANALYSIS_DB=/app/data/analyses.db
     restart: unless-stopped
+
+volumes:
+  analysis-data:
