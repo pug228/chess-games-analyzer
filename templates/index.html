@@ -12,6 +12,55 @@
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
             color: #e0e0e0;
+            transition: background 0.3s, color 0.3s;
+        }
+        body.light-mode {
+            background: linear-gradient(135deg, #f0f2f5 0%, #e2e6ea 100%);
+            color: #1a1a2e;
+        }
+        
+        /* Theme toggle button */
+        .theme-toggle {
+            position: fixed; top: 15px; right: 15px;
+            width: 40px; height: 40px; border-radius: 50%;
+            border: none; cursor: pointer;
+            background: #2a2a4a; color: #fff;
+            font-size: 18px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s; z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        body.light-mode .theme-toggle {
+            background: #fff; color: #1a1a2e;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .theme-toggle:hover { transform: scale(1.1); }
+        
+        /* Light mode overrides */
+        body.light-mode .input-section,
+        body.light-mode .board-section,
+        body.light-mode .analysis-section {
+            background: rgba(0,0,0,0.04);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        body.light-mode .input-group input {
+            background: #fff; color: #1a1a2e;
+            border-color: #ccc;
+        }
+        body.light-mode .move-list {
+            background: #fff;
+        }
+        body.light-mode .move-info {
+            background: #e8e8e8;
+        }
+        body.light-mode #gameInfo {
+            background: #e8e8e8;
+        }
+        body.light-mode .eval-bar-container {
+            background: #999;
+        }
+        body.light-mode .progress-bar-container {
+            background: #ddd;
         }
         
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -19,6 +68,20 @@
         header { text-align: center; padding: 30px 0; }
         header h1 { font-size: 2.5rem; color: #fff; }
         header p { color: #a0a0a0; margin-top: 10px; }
+        body.light-mode header h1 { color: #1a1a2e; }
+        body.light-mode header p { color: #666; }
+        
+        /* Opening info bar */
+        #openingInfo {
+            text-align: center; margin-top: 8px; padding: 8px;
+            background: rgba(108, 99, 255, 0.1); border-radius: 5px;
+            font-size: 0.85rem;
+        }
+        #openingInfo a { color: #6c63ff; text-decoration: none; }
+        #openingInfo a:hover { text-decoration: underline; }
+        body.light-mode #openingInfo { background: rgba(108, 99, 255, 0.08); }
+        #openingName { font-weight: 600; }
+        #openingEco { color: #a0a0a0; margin-left: 8px; }
         
         .input-section {
             background: rgba(255,255,255,0.05);
@@ -48,6 +111,15 @@
         .btn-primary:hover { box-shadow: 0 4px 12px rgba(108, 99, 255, 0.4); }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         
+        .btn-download {
+            padding: 8px 16px; font-size: 0.85rem; font-weight: 600;
+            border: 1px solid #3a3a5c; border-radius: 6px;
+            background: #2a2a4a; color: #a0a0a0; cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-download:hover { background: #3a3a5c; color: #fff; }
+        .btn-download:disabled { opacity: 0.3; cursor: not-allowed; }
+        
         .main-content {
             display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
         }
@@ -60,11 +132,46 @@
         
         .board-layout {
             display: grid;
-            grid-template-columns: 1fr 160px;
-            gap: 15px;
+            grid-template-columns: auto 1fr 160px;
+            gap: 10px;
+            align-items: start;
         }
         @media (max-width: 700px) {
             .board-layout { grid-template-columns: 1fr; }
+        }
+        
+        /* Evaluation Bar */
+        .eval-bar-container {
+            width: 28px;
+            height: 400px;
+            background: #555;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .eval-bar-white {
+            background: #fff;
+            transition: height 0.3s ease;
+            width: 100%;
+        }
+        .eval-bar-black {
+            background: #333;
+            flex: 1;
+        }
+        .eval-bar-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-90deg);
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 0 3px #000;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 1;
         }
         
         /* Move List */
@@ -180,7 +287,15 @@
         .btn-move {
             padding: 10px 20px; background: #3a3a5c; color: #fff;
             border: none; border-radius: 5px; cursor: pointer;
-            font-size: 1.2rem;
+            font-size: 1.2rem; min-width: 44px; min-height: 44px;
+        }
+        @media (max-width: 600px) {
+            .btn-move { padding: 14px 24px; font-size: 1.4rem; }
+            .square { font-size: 30px; }
+            #board { width: 100%; height: auto; aspect-ratio: 1/1; }
+            .move-list { max-height: 300px; }
+            .eval-bar-container { height: 100%; }
+            .board-layout { grid-template-columns: auto 1fr 120px; }
         }
         .btn-move:hover { background: #4a4a7c; }
         .btn-move:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -202,6 +317,36 @@
         /* Loading */
         .loading { display: none; text-align: center; padding: 40px; }
         .loading.active { display: block; }
+        .loading-steps { text-align: left; max-width: 400px; margin: 20px auto 0; }
+        .loading-step {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 0; color: #555; font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+        .loading-step.active { color: #6c63ff; }
+        .loading-step.done { color: #16a34a; }
+        .loading-step.error { color: #ff4757; }
+        .step-icon { width: 20px; text-align: center; }
+        .step-spinner {
+            width: 14px; height: 14px;
+            border: 2px solid transparent;
+            border-top: 2px solid #6c63ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .step-check { color: #16a34a; font-weight: bold; }
+        
+        .progress-bar-container {
+            max-width: 400px; margin: 20px auto 0;
+            height: 6px; background: #2a2a4a;
+            border-radius: 3px; overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #6c63ff, #4834d4);
+            transition: width 0.5s ease;
+            border-radius: 3px;
+        }
         .spinner {
             border: 4px solid #3a3a5c; border-top: 4px solid #6c63ff;
             border-radius: 50%; width: 50px; height: 50px;
@@ -219,9 +364,15 @@
 </head>
 <body>
     <div class="container">
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌙</button>
+        
         <header>
             <h1>♟️ Chess Game Analyzer</h1>
             <p>Paste a chess.com game URL and get AI-powered analysis</p>
+            <div id="openingInfo" style="display:none;">
+                <span id="openingName"></span>
+                <span id="openingEco"></span>
+            </div>
         </header>
         
         <div class="input-section">
@@ -235,7 +386,28 @@
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Analyzing your game with AI...</p>
+            <p id="loadingTitle">Analyzing your game...</p>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progressFill"></div>
+            </div>
+            <div class="loading-steps" id="loadingSteps">
+                <div class="loading-step" id="step-fetching">
+                    <span class="step-icon" id="icon-fetching">○</span>
+                    <span>Fetching game from chess.com</span>
+                </div>
+                <div class="loading-step" id="step-stockfish">
+                    <span class="step-icon" id="icon-stockfish">○</span>
+                    <span>Running Stockfish engine</span>
+                </div>
+                <div class="loading-step" id="step-llm">
+                    <span class="step-icon" id="icon-llm">○</span>
+                    <span>Generating AI commentary</span>
+                </div>
+                <div class="loading-step" id="step-finalizing">
+                    <span class="step-icon" id="icon-finalizing">○</span>
+                    <span>Preparing results</span>
+                </div>
+            </div>
         </div>
         
         <div class="main-content" id="mainContent" style="display: none;">
@@ -244,6 +416,13 @@
                     <strong id="gameTitle"></strong>
                 </div>
                 <div class="board-layout">
+                    <div>
+                        <div class="eval-bar-container" id="evalBar" style="display:none;">
+                            <div class="eval-bar-label" id="evalLabel">0.00</div>
+                            <div class="eval-bar-white" id="evalBarWhite" style="height: 50%;"></div>
+                            <div class="eval-bar-black"></div>
+                        </div>
+                    </div>
                     <div>
                         <div id="board"></div>
                         <div class="move-controls">
@@ -261,7 +440,10 @@
             </div>
             
             <div class="analysis-section">
-                <h2>📊 AI Analysis</h2>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <h2 style="margin:0;">📊 AI Analysis</h2>
+                    <button class="btn-download" id="downloadBtn" style="display:none;" title="Download PGN with comments">📥 Download PGN</button>
+                </div>
                 <div class="analysis-content" id="analysisContent"></div>
             </div>
         </div>
@@ -327,9 +509,28 @@
         let evaluations = [];
         let currentMoveIndex = -1;
         let startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        let currentPgn = '';
         
-        // Elements
+        // Elements — define $ FIRST
         const $ = id => document.getElementById(id);
+
+        // Theme toggle
+        const themeToggle = $('themeToggle');
+        const savedTheme = localStorage.getItem('chess-analyzer-theme');
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-mode');
+            if (themeToggle) themeToggle.textContent = '☀️';
+        }
+        if (themeToggle) {
+            themeToggle.addEventListener('click', function() {
+                document.body.classList.toggle('light-mode');
+                var isLight = document.body.classList.contains('light-mode');
+                themeToggle.textContent = isLight ? '☀️' : '🌙';
+                localStorage.setItem('chess-analyzer-theme', isLight ? 'light' : 'dark');
+            });
+        }
+        
+        // Element references
         const analyzeBtn = $('analyzeBtn');
         const loading = $('loading');
         const mainContent = $('mainContent');
@@ -341,6 +542,9 @@
         const gameTitle = $('gameTitle');
         const gameUrlInput = $('gameUrl');
         const moveListEl = $('moveList');
+        const evalBarEl = $('evalBar');
+        const evalBarWhite = $('evalBarWhite');
+        const evalLabelEl = $('evalLabel');
         
         function showError(msg) {
             errorMessage.textContent = msg;
@@ -372,14 +576,12 @@
                 html += '<div style="display:flex;align-items:center;padding:2px 4px;">';
                 html += `<span class="move-number">${moveNum}.</span>`;
                 
-                // White move
                 const isActive1 = i === currentMoveIndex;
                 html += `<span class="move-row ${isActive1 ? 'active' : ''}" onclick="window.goToMove(${i})" style="padding:2px 4px;flex:1;">`;
                 html += `<span class="move-san">${moves[i].san}</span>`;
                 if (cat1) html += `<span class="move-dot dot-${cat1}"></span>`;
                 html += '</span>';
                 
-                // Black move
                 if (moves[i + 1]) {
                     const isActive2 = i + 1 === currentMoveIndex;
                     html += `<span class="move-row ${isActive2 ? 'active' : ''}" onclick="window.goToMove(${i + 1})" style="padding:2px 4px;flex:1;">`;
@@ -392,9 +594,46 @@
             }
             moveListEl.innerHTML = html;
             
-            // Scroll to active move
             const activeEl = moveListEl.querySelector('.move-row.active');
             if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+        
+        function updateEvalBar() {
+            if (!evalBarEl || !evaluations.length) {
+                if (evalBarEl) evalBarEl.style.display = 'none';
+                return;
+            }
+            
+            evalBarEl.style.display = 'flex';
+            
+            // Get the score for the current position
+            let score = 0;
+            let scoreText = '0.00';
+            
+            if (currentMoveIndex >= 0 && currentMoveIndex < evaluations.length) {
+                const ev = evaluations[currentMoveIndex];
+                scoreText = ev.score || '0.00';
+            }
+            
+            // Parse scoreText: could be "+1.20", "-0.50", "M3", "M-2"
+            let cpValue = 0;
+            if (scoreText.startsWith('M') || scoreText.startsWith('-M')) {
+                // Mate score
+                const mateIn = parseInt(scoreText.replace(/M-?/, '')) || 1;
+                cpValue = mateIn > 0 ? 1000 : -1000;
+                scoreText = 'M' + Math.abs(mateIn);
+            } else {
+                cpValue = parseFloat(scoreText) * 100 || 0;
+            }
+            
+            // Convert to percentage (sigmoid-like curve)
+            // At 0cp = 50%, at +500cp = ~90%, at -500cp = ~10%
+            let whitePct = 50 + (50 * (1 - 1 / (1 + Math.pow(Math.abs(cpValue) / 100, 1.5)))) * Math.sign(cpValue);
+            if (isNaN(whitePct)) whitePct = 50;
+            whitePct = Math.max(2, Math.min(98, whitePct));
+            
+            evalBarWhite.style.height = whitePct + '%';
+            evalLabelEl.textContent = scoreText;
         }
         
         function updateMoveInfo() {
@@ -438,6 +677,7 @@
             updateMoveInfo();
             updateControls();
             renderMoveList();
+            updateEvalBar();
         }
         
         function goToPrev() {
@@ -448,6 +688,7 @@
                 updateMoveInfo();
                 updateControls();
                 renderMoveList();
+                updateEvalBar();
             }
         }
         
@@ -458,6 +699,7 @@
                 updateMoveInfo();
                 updateControls();
                 renderMoveList();
+                updateEvalBar();
             }
         }
         
@@ -468,10 +710,10 @@
                 updateMoveInfo();
                 updateControls();
                 renderMoveList();
+                updateEvalBar();
             }
         }
         
-        // Make goToMove available globally for onclick
         window.goToMove = function(index) {
             if (index < 0 || index >= moves.length) return;
             currentMoveIndex = index;
@@ -479,6 +721,7 @@
             updateMoveInfo();
             updateControls();
             renderMoveList();
+            updateEvalBar();
         };
         
         // Event listeners
@@ -486,6 +729,29 @@
         $('prevBtn').addEventListener('click', goToPrev);
         $('nextBtn').addEventListener('click', goToNext);
         $('endBtn').addEventListener('click', goToEnd);
+
+        // Download PGN
+        if ($('downloadBtn')) {
+            $('downloadBtn').addEventListener('click', () => {
+                fetch('/api/export-pgn', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pgn: currentPgn, evaluations: evaluations })
+                })
+                .then(res => res.blob())
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'chess_analysis.pgn';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                })
+                .catch(() => alert('Failed to download PGN'));
+            });
+        }
         
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowLeft') goToPrev();
@@ -493,54 +759,360 @@
             else if (e.key === 'Home') goToStart();
             else if (e.key === 'End') goToEnd();
         });
+
+        // Touch/swipe navigation on the board
+        (function() {
+            var boardEl = document.getElementById('board');
+            var touchStartX = 0;
+            var touchStartY = 0;
+            var minSwipe = 40; // minimum swipe distance in px
+
+            boardEl.addEventListener('touchstart', function(e) {
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            }, { passive: true });
+
+            boardEl.addEventListener('touchend', function(e) {
+                var touchEndX = e.changedTouches[0].screenX;
+                var touchEndY = e.changedTouches[0].screenY;
+                var diffX = touchEndX - touchStartX;
+                var diffY = touchEndY - touchStartY;
+
+                // Only handle horizontal swipes (ignore vertical scrolls)
+                if (Math.abs(diffX) > minSwipe && Math.abs(diffX) > Math.abs(diffY)) {
+                    e.preventDefault();
+                    if (diffX < 0) {
+                        goToNext(); // swipe left = next move
+                    } else {
+                        goToPrev(); // swipe right = previous move
+                    }
+                }
+            }, { passive: false });
+        })();
         
-        analyzeBtn.addEventListener('click', async () => {
+        analyzeBtn.addEventListener('click', () => {
             const url = gameUrlInput.value.trim();
             if (!url) { showError('Please enter a chess.com game URL'); return; }
             if (!url.includes('chess.com/game/')) { showError('URL must be from chess.com'); return; }
-            
+
             analyzeBtn.disabled = true;
             loading.classList.add('active');
             mainContent.style.display = 'none';
             statusMessage.style.display = 'none';
             errorMessage.classList.remove('active');
-            
-            try {
-                const response = await fetch('/api/analyze', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url })
-                });
-                
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Analysis failed');
-                
-                moves = data.moves || [];
-                evaluations = data.evaluations || [];
-                currentMoveIndex = -1;
-                renderBoard(startFen);
-                renderMoveList();
-                
-                const meta = data.metadata || {};
-                gameTitle.textContent = `${meta.white || '?'} (${meta.white_elo || '?'}) vs ${meta.black || '?'} (${meta.black_elo || '?'}) - ${meta.result || '?'}`;
-                gameInfo.style.display = 'block';
-                
-                analysisContent.innerHTML = formatAnalysis(data.analysis);
-                console.log('Analysis type:', typeof data.analysis, 'Value:', data.analysis);
-                
-                loading.classList.remove('active');
-                mainContent.style.display = 'grid';
-                updateMoveInfo();
-                updateControls();
-                
-            } catch (error) {
+
+            // Reset progress UI
+            resetProgressSteps();
+            var progressFill = $('progressFill');
+            if (progressFill) progressFill.style.width = '0%';
+
+            // Use SSE for real-time progress
+            var evtSource = new EventSource('/api/analyze-stream?url=' + encodeURIComponent(url));
+
+            evtSource.onmessage = function(e) {
+                var msg;
+                try { msg = JSON.parse(e.data); } catch(ex) { return; }
+
+                var step = msg.step;
+                var progress = msg.progress || 0;
+                if (progressFill) progressFill.style.width = progress + '%';
+
+                // Update step indicators
+                if (step === 'fetching') setStepActive('fetching');
+                else if (step === 'stockfish' || step === 'stockfish_done') setStepDone('stockfish');
+                else if (step === 'llm') setStepActive('llm');
+                else if (step === 'finalizing') { setStepActive('finalizing'); setStepDone('llm'); }
+                else if (step === 'done') {
+                    setStepDone('finalizing');
+                    var data = msg.data;
+                    moves = data.moves || [];
+                    evaluations = data.evaluations || [];
+                    currentPgn = data.pgn || '';
+                    currentMoveIndex = -1;
+                    renderBoard(startFen);
+                    renderMoveList();
+                    updateEvalBar();
+                    if ($('downloadBtn')) $('downloadBtn').style.display = 'block';
+                    const meta = data.metadata || {};
+                    gameTitle.textContent = (meta.white || '?') + ' (' + (meta.white_elo || '?') + ') vs ' + (meta.black || '?') + ' (' + (meta.black_elo || '?') + ') - ' + (meta.result || '?');
+                    gameInfo.style.display = 'block';
+                    
+                    // Show opening info
+                    var eco = meta.eco || '';
+                    var ecoUrl = meta.eco_url || '';
+                    if (eco) {
+                        var openingInfo = $('openingInfo');
+                        var openingName = $('openingName');
+                        var openingEco = $('openingEco');
+                        if (openingInfo && openingName && openingEco) {
+                            openingName.textContent = _getOpeningName(eco);
+                            if (ecoUrl) {
+                                openingEco.innerHTML = ' (<a href="' + ecoUrl + '" target="_blank" rel="noopener">' + eco + '</a>)';
+                            } else {
+                                openingEco.textContent = ' (' + eco + ')';
+                            }
+                            openingInfo.style.display = 'block';
+                        }
+                    }
+                    
+                    analysisContent.innerHTML = formatAnalysis(data.analysis);
+                    evtSource.close();
+                    setTimeout(function() {
+                        loading.classList.remove('active');
+                        mainContent.style.display = 'grid';
+                        updateMoveInfo();
+                        updateControls();
+                        analyzeBtn.disabled = false;
+                    }, 500);
+                }
+                else if (step === 'error') {
+                    evtSource.close();
+                    loading.classList.remove('active');
+                    statusMessage.style.display = 'block';
+                    showError(msg.error || 'Analysis failed');
+                    analyzeBtn.disabled = false;
+                }
+            };
+
+            evtSource.onerror = function() {
+                evtSource.close();
                 loading.classList.remove('active');
                 statusMessage.style.display = 'block';
-                showError(error.message);
-            } finally {
+                showError('Connection lost. Please try again.');
                 analyzeBtn.disabled = false;
-            }
+            };
         });
+
+        function resetProgressSteps() {
+            ['fetching', 'stockfish', 'llm', 'finalizing'].forEach(function(s) {
+                var el = $('step-' + s);
+                var icon = $('icon-' + s);
+                if (el) { el.className = 'loading-step'; }
+                if (icon) { icon.textContent = '○'; }
+            });
+        }
+
+        function setStepActive(step) {
+            var el = $('step-' + step);
+            var icon = $('icon-' + step);
+            if (el) el.className = 'loading-step active';
+            if (icon) icon.innerHTML = '<span class="step-spinner"></span>';
+        }
+
+        function setStepDone(step) {
+            var el = $('step-' + step);
+            var icon = $('icon-' + step);
+            if (el) el.className = 'loading-step done';
+            if (icon) icon.innerHTML = '<span class="step-check">✓</span>';
+        }
+        
+        // Map ECO codes to opening names (simplified)
+        function _getOpeningName(eco) {
+            var openings = {
+                'A00': 'Uncommon Opening', 'A01': "Nimzo-Larsen Attack",
+                'A04': 'Reti Opening', 'A05': 'Reti Opening',
+                'A10': 'English Opening', 'A11': 'English Opening, Caro-Kann',
+                'A15': 'English Opening, 1...Nf6', 'A20': 'English Opening',
+                'A25': 'English, Closed', 'A30': 'English, Symmetrical',
+                'A40': 'Queen\'s Pawn', 'A41': 'Queen\'s Pawn Game',
+                'A45': 'Queen\'s Pawn Game', 'A46': 'Queen\'s Pawn Game',
+                'A50': 'Queen\'s Pawn Game', 'A53': 'Old Indian Defense',
+                'A55': 'Old Indian, Main', 'A56': 'Benoni Defense',
+                'A80': 'Dutch Defense', 'A84': 'Dutch Defense',
+                'A85': 'Dutch, Queen\'s Knight', 'A87': 'Dutch, Leningrad',
+                'B00': 'Uncommon Defense', 'B01': 'Scandinavian Defense',
+                'B06': 'Modern Defense', 'B07': 'Pirc Defense',
+                'B08': 'Pirc, Classical', 'B09': 'Pirc, Austrian',
+                'B10': 'Caro-Kann Defense', 'B12': 'Caro-Kann Defense',
+                'B13': 'Caro-Kann, Exchange', 'B15': 'Caro-Kann Defense',
+                'B17': 'Caro-Kann, Steinitz', 'B20': 'Sicilian Defense',
+                'B21': 'Sicilian, Smith-Morra', 'B22': 'Sicilian, Alapin',
+                'B23': 'Sicilian, Closed', 'B24': 'Sicilian, Closed',
+                'B27': 'Sicilian Defense', 'B30': 'Sicilian, Rossolimo',
+                'B31': 'Sicilian, Rossolimo', 'B32': 'Sicilian, Labordonnais',
+                'B33': 'Sicilian, Sveshnikov', 'B34': 'Sicilian, Accelerated Dragon',
+                'B35': 'Sicilian, Accelerated Dragon', 'B38': 'Sicilian, Accelerated Dragon',
+                'B40': 'Sicilian Defense', 'B41': 'Sicilian, Kan',
+                'B42': 'Sicilian, Kan', 'B44': 'Sicilian, Taimanov',
+                'B45': 'Sicilian, Taimanov', 'B46': 'Sicilian, Taimanov',
+                'B47': 'Sicilian, Taimanov', 'B48': 'Sicilian, Taimanov',
+                'B50': 'Sicilian Defense', 'B51': 'Sicilian, Canal-Sokolsky',
+                'B52': 'Sicilian, Rossolimo', 'B53': 'Sicilian, Chekhover',
+                'B60': 'Sicilian, Richter-Rauzer', 'B62': 'Sicilian, Richter-Rauzer',
+                'B63': 'Sicilian, Richter-Rauzer', 'B66': 'Sicilian, Richter-Rauzer',
+                'B70': 'Sicilian, Dragon', 'B72': 'Sicilian, Dragon, Levenfish',
+                'B75': 'Sicilian, Dragon, Yugoslav', 'B76': 'Sicilian, Dragon, Yugoslav',
+                'B77': 'Sicilian, Dragon, Yugoslav', 'B78': 'Sicilian, Dragon, Yugoslav',
+                'B79': 'Sicilian, Dragon, Yugoslav, 12.h4', 'B80': 'Sicilian, Scheveningen',
+                'B81': 'Sicilian, Scheveningen, Keres', 'B82': 'Sicilian, Scheveningen',
+                'B83': 'Sicilian, Scheveningen', 'B84': 'Sicilian, Scheveningen',
+                'B85': 'Sicilian, Scheveningen', 'B86': 'Sicilian, Sozin',
+                'B87': 'Sicilian, Sozin', 'B88': 'Sicilian, Sozin, Leonhardt',
+                'B89': 'Sicilian, Sozin', 'B90': 'Sicilian, Najdorf',
+                'B91': 'Sicilian, Najdorf, Zagreb', 'B92': 'Sicilian, Najdorf, Opocensky',
+                'B93': 'Sicilian, Najdorf, 6.f4', 'B94': 'Sicilian, Najdorf, 6.Be3',
+                'B95': 'Sicilian, Najdorf, 6...e6', 'B96': 'Sicilian, Najdorf, 7...Be7',
+                'B97': 'Sicilian, Najdorf, Poisoned Pawn', 'B98': 'Sicilian, Najdorf, Poisoned Pawn',
+                'B99': 'Sicilian, Najdorf, 7...Be7 Main', 'C00': 'French Defense',
+                'C01': 'French, Exchange', 'C02': 'French, Advance',
+                'C03': 'French, Tarrasch', 'C04': 'French, Tarrasch, Guimard',
+                'C05': 'French, Tarrasch', 'C06': 'French, Tarrasch',
+                'C07': 'French, Tarrasch', 'C08': 'French, Tarrasch, Open',
+                'C09': 'French, Tarrasch, Open', 'C10': 'French, Paulsen',
+                'C11': 'French Defense', 'C12': 'French, MacCutcheon',
+                'C13': 'French, Classical', 'C14': 'French, Classical',
+                'C15': 'French, Winawer', 'C16': 'French, Winawer, Advance',
+                'C17': 'French, Winawer, Advance', 'C18': 'French, Winawer, Advance',
+                'C19': 'French, Winawer, Advance', 'C20': 'King\'s Pawn Game',
+                'C21': 'Center Game', 'C22': 'Center Game',
+                'C23': 'Bishop\'s Opening', 'C24': 'Bishop\'s Opening, Berlin',
+                'C25': 'Vienna Game', 'C26': 'Vienna, Falkbeer',
+                'C27': 'Vienna Game', 'C28': 'Vienna, Stanley',
+                'C29': 'Vienna, Kaufmann', 'C30': 'King\'s Gambit Declined',
+                'C31': 'King\'s Gambit, Falkbeer', 'C32': 'King\'s Gambit, Falkbeer',
+                'C33': 'King\'s Gambit Accepted', 'C34': 'King\'s Gambit Accepted',
+                'C35': 'King\'s Gambit, Cunningham', 'C36': 'King\'s Gambit, Abbazia',
+                'C37': 'King\'s Gambit, Quaade', 'C38': 'King\'s Gambit, Philidor',
+                'C39': 'King\'s Gambit, Allgaier', 'C40': 'King\'s Pawn Game',
+                'C41': 'Philidor Defense', 'C42': 'Petrov\'s Defense',
+                'C43': 'Petrov, Modern', 'C44': 'King\'s Pawn Game',
+                'C45': 'Scotch Game', 'C46': 'Three Knights',
+                'C47': 'Four Knights', 'C48': 'Four Knights, Spanish',
+                'C49': 'Four Knights, Double Spanish', 'C50': 'Italian Game',
+                'C51': 'Evans Gambit', 'C52': 'Evans Gambit',
+                'C53': 'Italian Game, Classical', 'C54': 'Italian Game, Classical',
+                'C55': 'Italian, Two Knights', 'C56': 'Italian, Two Knights',
+                'C57': 'Italian, Two Knights, Fried Liver', 'C58': 'Italian, Two Knights, Polerio',
+                'C59': 'Italian, Two Knights, Modern', 'C60': 'Ruy Lopez',
+                'C61': 'Ruy Lopez, Bird\'s Defense', 'C62': 'Ruy Lopez, Steinitz',
+                'C63': 'Ruy Lopez, Schliemann', 'C64': 'Ruy Lopez, Classical',
+                'C65': 'Ruy Lopez, Berlin', 'C66': 'Ruy Lopez, Berlin',
+                'C67': 'Ruy Lopez, Berlin, Open', 'C68': 'Ruy Lopez, Exchange',
+                'C69': 'Ruy Lopez, Exchange, 5.O-O', 'C70': 'Ruy Lopez',
+                'C71': 'Ruy Lopez, Modern Steinitz', 'C72': 'Ruy Lopez, Modern Steinitz',
+                'C73': 'Ruy Lopez, Modern Steinitz', 'C74': 'Ruy Lopez, Modern Steinitz',
+                'C75': 'Ruy Lopez, Modern Steinitz', 'C76': 'Ruy Lopez, Modern Steinitz, Fianchetto',
+                'C77': 'Ruy Lopez, Morphy', 'C78': 'Ruy Lopez, Morphy',
+                'C79': 'Ruy Lopez, Steinitz Defense Deferred', 'C80': 'Ruy Lopez, Open',
+                'C81': 'Ruy Lopez, Open, Howell Attack', 'C82': 'Ruy Lopez, Open',
+                'C83': 'Ruy Lopez, Open, Classical', 'C84': 'Ruy Lopez, Closed',
+                'C85': 'Ruy Lopez, Closed', 'C86': 'Ruy Lopez, Closed, Worrall',
+                'C87': 'Ruy Lopez, Closed, Averbakh', 'C88': 'Ruy Lopez, Closed',
+                'C89': 'Ruy Lopez, Marshall', 'C90': 'Ruy Lopez, Closed',
+                'C91': 'Ruy Lopez, Closed, 9.d4', 'C92': 'Ruy Lopez, Closed, 9.h3',
+                'C93': 'Ruy Lopez, Closed, Smyslov', 'C94': 'Ruy Lopez, Closed, Breyer',
+                'C95': 'Ruy Lopez, Closed, Breyer', 'C96': 'Ruy Lopez, Closed, Chigorin',
+                'C97': 'Ruy Lopez, Closed, Chigorin', 'C98': 'Ruy Lopez, Closed, Zaitsev',
+                'C99': 'Ruy Lopez, Closed, Chigorin, 12...cxd4',
+                'D00': 'Queen\'s Pawn Game', 'D01': 'Rapport-Jobava System',
+                'D02': 'Queen\'s Pawn Game, 2.Nf3', 'D03': 'Torre Attack',
+                'D04': 'Queen\'s Pawn Game', 'D05': 'Queen\'s Pawn Game, Zukertort',
+                'D06': 'Queen\'s Gambit Declined', 'D07': 'Queen\'s Gambit, Chigorin',
+                'D08': 'Queen\'s Gambit, Albin', 'D09': 'Queen\'s Gambit, Albin',
+                'D10': 'Slav Defense', 'D11': 'Slav Defense',
+                'D12': 'Slav Defense', 'D13': 'Slav, Exchange',
+                'D14': 'Slav, Exchange', 'D15': 'Slav Defense',
+                'D16': 'Slav, Smyslov', 'D17': 'Slav, Czech',
+                'D18': 'Slav, Dutch', 'D19': 'Slav, Dutch',
+                'D20': 'Queen\'s Gambit Accepted', 'D21': 'Queen\'s Gambit Accepted',
+                'D22': 'Queen\'s Gambit Accepted, Alekhine', 'D23': 'Queen\'s Gambit Accepted',
+                'D24': 'Queen\'s Gambit Accepted', 'D25': 'Queen\'s Gambit Accepted',
+                'D26': 'Queen\'s Gambit Accepted', 'D27': 'Queen\'s Gambit Accepted',
+                'D28': 'Queen\'s Gambit Accepted, Classical', 'D29': 'Queen\'s Gambit Accepted, Classical',
+                'D30': 'Queen\'s Gambit Declined', 'D31': 'Queen\'s Gambit Declined',
+                'D32': 'Queen\'s Gambit Declined, Tarrasch', 'D33': 'Queen\'s Gambit Declined, Tarrasch',
+                'D34': 'Queen\'s Gambit Declined, Tarrasch', 'D35': 'Queen\'s Gambit Declined, Exchange',
+                'D36': 'Queen\'s Gambit Declined, Exchange', 'D37': 'Queen\'s Gambit Declined',
+                'D38': 'Queen\'s Gambit Declined, Ragozin', 'D39': 'Queen\'s Gambit Declined, Vienna',
+                'D40': 'Queen\'s Gambit Declined, Semi-Tarrasch', 'D41': 'Queen\'s Gambit Declined, Semi-Tarrasch',
+                'D42': 'Queen\'s Gambit Declined, Semi-Tarrasch', 'D43': 'Semi-Slav Defense',
+                'D44': 'Semi-Slav, Botvinnik', 'D45': 'Semi-Slav Defense',
+                'D46': 'Semi-Slav, Semi-Meran', 'D47': 'Semi-Slav, Meran',
+                'D48': 'Semi-Slav, Meran', 'D49': 'Semi-Slav, Meran',
+                'D50': 'Queen\'s Gambit Declined', 'D51': 'Queen\'s Gambit Declined',
+                'D52': 'Queen\'s Gambit Declined, Cambridge Springs', 'D53': 'Queen\'s Gambit Declined',
+                'D54': 'Queen\'s Gambit Declined, Neo-Orthodox', 'D55': 'Queen\'s Gambit Declined, Neo-Orthodox',
+                'D56': 'Queen\'s Gambit Declined, Lasker', 'D57': 'Queen\'s Gambit Declined, Lasker',
+                'D58': 'Queen\'s Gambit Declined, Tartakower', 'D59': 'Queen\'s Gambit Declined, Tartakower',
+                'D60': 'Queen\'s Gambit Declined, Orthodox', 'D61': 'Queen\'s Gambit Declined, Orthodox',
+                'D62': 'Queen\'s Gambit Declined, Orthodox, 7.Qc2', 'D63': 'Queen\'s Gambit Declined, Orthodox',
+                'D64': 'Queen\'s Gambit Declined, Orthodox, Rubinstein', 'D65': 'Queen\'s Gambit Declined, Orthodox',
+                'D66': 'Queen\'s Gambit Declined, Orthodox, Bd3', 'D67': 'Queen\'s Gambit Declined, Orthodox',
+                'D68': 'Queen\'s Gambit Declined, Orthodox, Classical', 'D69': 'Queen\'s Gambit Declined, Orthodox',
+                'D70': 'Neo-Grünfeld Defense', 'D71': 'Neo-Grünfeld, Fianchetto',
+                'D72': 'Neo-Grünfeld, 5.cxd5', 'D73': 'Neo-Grünfeld, 5.Nf3',
+                'D74': 'Neo-Grünfeld, 6.cxd5', 'D75': 'Neo-Grünfeld, 6.cxd5, Nxd5',
+                'D76': 'Neo-Grünfeld, 6.cxd5, Nb6', 'D77': 'Grünfeld, Russian',
+                'D78': 'Grünfeld, Symmetrical', 'D79': 'Grünfeld, Fianchetto',
+                'D80': 'Grünfeld Defense', 'D81': 'Grünfeld, Russian',
+                'D82': 'Grünfeld, 4.Bf4', 'D83': 'Grünfeld, Grau',
+                'D84': 'Grünfeld, Accepted', 'D85': 'Grünfeld, Exchange',
+                'D86': 'Grünfeld, Exchange, Classical', 'D87': 'Grünfeld, Exchange, Spassky',
+                'D88': 'Grünfeld, Exchange, Spassky', 'D89': 'Grünfeld, Exchange, Sokolsky',
+                'D90': 'Grünfeld Defense', 'D91': 'Grünfeld, 5.Bg5',
+                'D92': 'Grünfeld, 5.Bf4', 'D93': 'Grünfeld, with Bf4',
+                'D94': 'Grünfeld, 5.e3', 'D95': 'Grünfeld, with e3, Bd7',
+                'D96': 'Grünfeld, Russian', 'D97': 'Grünfeld, Russian',
+                'D98': 'Grünfeld, Russian, Smyslov', 'D99': 'Grünfeld, Russian, Smyslov',
+                'E00': 'Queen\'s Pawn Game', 'E01': 'Catalan Opening',
+                'E02': 'Catalan, Open', 'E03': 'Catalan, Open',
+                'E04': 'Catalan, Open', 'E05': 'Catalan, Open',
+                'E06': 'Catalan, Closed', 'E07': 'Catalan, Closed',
+                'E08': 'Catalan, Closed', 'E09': 'Catalan, Closed',
+                'E10': 'Queen\'s Pawn Game', 'E11': 'Bogo-Indian Defense',
+                'E12': 'Queen\'s Indian, Petrosian', 'E13': 'Queen\'s Indian, 4.Nc3',
+                'E14': 'Queen\'s Indian, Averbakh', 'E15': 'Queen\'s Indian',
+                'E16': 'Queen\'s Indian, Capablanca', 'E17': 'Queen\'s Indian',
+                'E18': 'Queen\'s Indian, Old Main', 'E19': 'Queen\'s Indian, Averbakh',
+                'E20': 'Nimzo-Indian Defense', 'E21': 'Nimzo-Indian, Three Knights',
+                'E22': 'Nimzo-Indian, Spielmann', 'E23': 'Nimzo-Indian, Spielmann',
+                'E24': 'Nimzo-Indian, Saemisch', 'E25': 'Nimzo-Indian, Saemisch',
+                'E26': 'Nimzo-Indian, Saemisch', 'E27': 'Nimzo-Indian, 4.a3',
+                'E28': 'Nimzo-Indian, Saemisch', 'E29': 'Nimzo-Indian, Saemisch',
+                'E30': 'Nimzo-Indian, Leningrad', 'E31': 'Nimzo-Indian, Leningrad',
+                'E32': 'Nimzo-Indian, Classical', 'E33': 'Nimzo-Indian, Classical',
+                'E34': 'Nimzo-Indian, Classical, Noa', 'E35': 'Nimzo-Indian, Classical, Noa',
+                'E36': 'Nimzo-Indian, Classical, Noa', 'E37': 'Nimzo-Indian, Classical, Noa',
+                'E38': 'Nimzo-Indian, Classical, 4...c5', 'E39': 'Nimzo-Indian, Classical, Pirc',
+                'E40': 'Nimzo-Indian, 4.e3', 'E41': 'Nimzo-Indian, Huebner',
+                'E42': 'Nimzo-Indian, 4.e3, c5', 'E43': 'Nimzo-Indian, Fischer',
+                'E44': 'Nimzo-Indian, Fischer, 5.Ne2', 'E45': 'Nimzo-Indian, 4.e3, Bronstein',
+                'E46': 'Nimzo-Indian, 4.e3, O-O', 'E47': 'Nimzo-Indian, 4.e3, O-O',
+                'E48': 'Nimzo-Indian, 4.e3, O-O, 5.Bd3', 'E49': 'Nimzo-Indian, 4.e3, Botvinnik',
+                'E50': 'Nimzo-Indian, 4.e3, O-O, 5.Nf3', 'E51': 'Nimzo-Indian, 4.e3, O-O, 5.Nf3',
+                'E52': 'Nimzo-Indian, 4.e3, Main', 'E53': 'Nimzo-Indian, 4.e3, Main',
+                'E54': 'Nimzo-Indian, 4.e3, Gligoric', 'E55': 'Nimzo-Indian, 4.e3, Gligoric',
+                'E56': 'Nimzo-Indian, 4.e3, Main', 'E57': 'Nimzo-Indian, 4.e3, Main',
+                'E58': 'Nimzo-Indian, 4.e3, Main', 'E59': 'Nimzo-Indian, 4.e3, Main',
+                'E60': 'King\'s Indian Defense', 'E61': 'King\'s Indian, 3.Nc3',
+                'E62': 'King\'s Indian, Fianchetto', 'E63': 'King\'s Indian, Fianchetto',
+                'E64': 'King\'s Indian, Fianchetto', 'E65': 'King\'s Indian, Fianchetto',
+                'E66': 'King\'s Indian, Fianchetto', 'E67': 'King\'s Indian, Fianchetto',
+                'E68': 'King\'s Indian, Fianchetto, Classical', 'E69': 'King\'s Indian, Fianchetto, Classical',
+                'E70': 'King\'s Indian, 4.e4', 'E71': 'King\'s Indian, Makagonov',
+                'E72': 'King\'s Indian, 4.e4, g6', 'E73': 'King\'s Indian, Averbakh',
+                'E74': 'King\'s Indian, Averbakh, 6...c5', 'E75': 'King\'s Indian, Averbakh, Main',
+                'E76': 'King\'s Indian, Four Pawns', 'E77': 'King\'s Indian, Four Pawns',
+                'E78': 'King\'s Indian, Four Pawns, Classical', 'E79': 'King\'s Indian, Four Pawns, Classical',
+                'E80': 'King\'s Indian, Saemisch', 'E81': 'King\'s Indian, Saemisch',
+                'E82': 'King\'s Indian, Saemisch, Double Fianchetto', 'E83': 'King\'s Indian, Saemisch',
+                'E84': 'King\'s Indian, Saemisch, Panno', 'E85': 'King\'s Indian, Saemisch, Orthodox',
+                'E86': 'King\'s Indian, Saemisch, Orthodox, 7.Nge2', 'E87': 'King\'s Indian, Saemisch, Orthodox',
+                'E88': 'King\'s Indian, Saemisch, Orthodox, 7...d5', 'E89': 'King\'s Indian, Saemisch, Orthodox',
+                'E90': 'King\'s Indian, 5.Nf3', 'E91': 'King\'s Indian, 6.Be2',
+                'E92': 'King\'s Indian, Classical', 'E93': 'King\'s Indian, Petrosian',
+                'E94': 'King\'s Indian, Classical', 'E95': 'King\'s Indian, Classical, 7...Nbd7',
+                'E96': 'King\'s Indian, Classical, 7...Nbd7, Main', 'E97': 'King\'s Indian, Orthodox',
+                'E98': 'King\'s Indian, Orthodox, 9.Ne1', 'E99': 'King\'s Indian, Orthodox, Aronin-Taimanov'
+            };
+            // Try exact match first, then 2-letter prefix
+            if (openings[eco]) return openings[eco];
+            var prefix = eco.substring(0, 2);
+            for (var key in openings) {
+                if (key.substring(0, 2) === prefix) return openings[key] + ' (' + eco + ')';
+            }
+            return eco;
+        }
         
         function formatAnalysis(text) {
             if (text === null || text === undefined || text === '') {

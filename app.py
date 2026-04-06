@@ -1,7 +1,9 @@
 import re
 import json
 import requests
-from flask import Flask, render_template, request, jsonify
+import time
+import threading
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 import chess
 import chess.engine
 import chess.pgn
@@ -9,6 +11,9 @@ import io
 import os
 
 app = Flask(__name__)
+
+# Store progress for active analyses
+_analysis_progress = {}
 
 LLM_API_URL = "http://10.93.24.194:42005"
 LLM_API_KEY = "my-secret-api-key"  # Set your API key here if required
@@ -76,6 +81,7 @@ def fetch_chesscom_game(game_id, game_type="live"):
                     "white_elo": game_obj.headers.get("WhiteElo", "?"),
                     "black_elo": game_obj.headers.get("BlackElo", "?"),
                     "eco": game_obj.headers.get("ECO", "?"),
+                    "eco_url": game_obj.headers.get("ECOUrl", ""),
                     "termination": game_obj.headers.get("Termination", "?"),
                     "time_control": game_obj.headers.get("TimeControl", "?"),
                     "date": game_obj.headers.get("Date", "?"),
@@ -104,6 +110,7 @@ def fetch_chesscom_game(game_id, game_type="live"):
                         "white_elo": pgn_headers.get("WhiteElo", "?"),
                         "black_elo": pgn_headers.get("BlackElo", "?"),
                         "eco": pgn_headers.get("ECO", "?"),
+                        "eco_url": pgn_headers.get("ECOUrl", ""),
                         "termination": game_data.get("resultMessage", "?"),
                         "time_control": pgn_headers.get("TimeControl", "?"),
                         "date": pgn_headers.get("Date", "?"),
@@ -160,8 +167,8 @@ def _search_archives(username, game_id, headers, game_type="live"):
     return None
 
 
-def _analyze_with_llm(pgn, metadata):
-    """Send the game to the Qwen LLM for commentary."""
+def _analyze_with_llm(pgn, metadata, stockfish_evals=None):
+    """Send the game to the Qwen LLM for commentary, guided by Stockfish data."""
     # Extract moves from PGN for the prompt
     moves_list = []
     try:
@@ -178,7 +185,25 @@ def _analyze_with_llm(pgn, metadata):
     # Build the prompt - request structured per-move analysis
     moves_str = '\n'.join([f"Move {i+1}: {m}" for i, m in enumerate(moves_list)])
     
-    prompt = f"""You are a chess grandmaster and coach. Analyze the following game move by move.
+    # Build Stockfish context
+    stockfish_context = ""
+    if stockfish_evals:
+        context_lines = []
+        for i, ev in enumerate(stockfish_evals):
+            if i >= len(moves_list):
+                break
+            cat = ev.get("category", "?")
+            if cat in ("blunder", "mistake", "inaccuracy"):
+                reason = ev.get("reason", "")
+                best = ev.get("best_move", "")
+                best_str = f" (best was {best})" if best else ""
+                context_lines.append(f"  Move {i+1} ({moves_list[i]}): {cat.upper()} — {reason}{best_str}")
+        if context_lines:
+            stockfish_context = "\nStockfish engine analysis:\n" + '\n'.join(context_lines[:15])
+            if len(context_lines) > 15:
+                stockfish_context += f"\n  ... and {len(context_lines) - 15} more evaluated moves"
+    
+    prompt = f"""You are a chess grandmaster and coach. Analyze the following game.{stockfish_context}
 
 Game Info:
 - White: {metadata.get('white', '?')} (ELO: {metadata.get('white_elo', '?')})
@@ -189,34 +214,19 @@ Game Info:
 Moves:
 {moves_str}
 
-Provide TWO things:
+{stockfish_context}
 
-1. **Move-by-move evaluation** - For EACH move, classify it into exactly ONE category:
-   - **Brilliant** - Exceptional, hard-to-find move
-   - **Excellent** - Very strong move
-   - **Good** - Solid, reasonable move
-   - **Inaccuracy** - Slightly suboptimal but not terrible
-   - **Mistake** - Significant error
-   - **Blunder** - Major error losing material or advantage
-   - **Book** - Standard opening theory move
+IMPORTANT: The Stockfish engine analysis above is the ground truth for move quality. Do NOT contradict it. If Stockfish says a move is a blunder, explain WHY it's a blunder — don't call it "good". Use the engine data to explain tactical and positional reasons.
 
-2. **Overall game analysis** with:
-   - Opening assessment
-   - Key turning points
-   - Critical mistakes with better alternatives
-   - Endgame notes
-   - Lessons for both players
+Provide a detailed game analysis with:
+- Opening assessment
+- Key turning points and critical moments
+- Explain the engine's evaluations (why blunders/mistakes are bad)
+- Tactical opportunities that were missed
+- Endgame notes (if applicable)
+- Lessons for both players
 
-Format your response EXACTLY like this:
-
-EVALUATIONS:
-Move 1: Good - [brief reason]
-Move 2: Book - [brief reason]
-Move 3: Blunder - [brief reason]
-... (one line per move, same number as moves above)
-
-ANALYSIS:
-[Your detailed game analysis here]"""
+Be specific with move numbers and explain your reasoning clearly."""
 
     try:
         headers = {"Content-Type": "application/json"}
@@ -240,80 +250,11 @@ ANALYSIS:
         
         if response.status_code == 200:
             data = response.json()
-            raw = data["choices"][0]["message"]["content"]
-            return parse_llm_response(raw)
+            return data["choices"][0]["message"]["content"]
         else:
             raise Exception(f"LLM API returned status {response.status_code}: {response.text}")
     except requests.exceptions.ConnectionError:
         raise Exception(f"Cannot connect to LLM API at {LLM_API_URL}. Please ensure the server is running.")
-
-
-def parse_llm_response(raw):
-    """
-    Parse LLM response into evaluations list and analysis text.
-    Expected format:
-    EVALUATIONS:
-    Move 1: Good - reason
-    ...
-    ANALYSIS:
-    text...
-    """
-    evaluations = []
-    analysis_text = raw
-    
-    eval_section = False
-    analysis_section = False
-    
-    for line in raw.split('\n'):
-        stripped = line.strip()
-        
-        if stripped.startswith('EVALUATIONS:'):
-            eval_section = True
-            analysis_section = False
-            continue
-        elif stripped.startswith('ANALYSIS:'):
-            eval_section = False
-            analysis_section = True
-            continue
-        
-        if eval_section:
-            # Parse "Move N: Category - reason"
-            match = re.match(r'Move\s+(\d+):\s*(\w+)\s*-?\s*(.*)', stripped)
-            if match:
-                move_num = int(match.group(1))
-                category = match.group(2).strip()
-                reason = match.group(3).strip()
-                evaluations.append({
-                    "move": move_num - 1,  # 0-indexed
-                    "category": normalize_category(category),
-                    "reason": reason
-                })
-    
-    # If no EVALUATIONS section found, use entire response as analysis
-    if not evaluations:
-        analysis_text = raw
-    
-    return analysis_text, evaluations
-
-
-def normalize_category(cat):
-    """Normalize category names to a fixed set."""
-    cat_lower = cat.lower()
-    mapping = {
-        'brilliant': 'brilliant',
-        'excellent': 'excellent',
-        'good': 'good',
-        'book': 'book',
-        'standard': 'book',
-        'opening': 'book',
-        'inaccuracy': 'inaccuracy',
-        'inaccurate': 'inaccuracy',
-        'mistake': 'mistake',
-        'error': 'mistake',
-        'blunder': 'blunder',
-        'blundered': 'blunder',
-    }
-    return mapping.get(cat_lower, 'good')
 
 
 def evaluate_with_stockfish(pgn, time_limit=0.5):
@@ -687,68 +628,168 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/analyze", methods=["POST"])
-def analyze():
-    data = request.json
-    url = data.get("url", "").strip()
+@app.route("/api/analyze-stream", methods=["GET"])
+def analyze_stream():
+    """SSE endpoint for real-time analysis progress."""
+    url = request.args.get("url", "").strip()
     
-    if not url:
-        return jsonify({"error": "Please provide a chess.com game URL"}), 400
-    
-    if "chess.com/game/" not in url:
-        return jsonify({"error": "URL must be a chess.com game URL"}), 400
-    
+    if not url or "chess.com/game/" not in url:
+        return Response('data: {"step":"error","error":"Invalid chess.com URL"}\n\n',
+                       mimetype="text/event-stream")
+
     game_type, game_id = parse_chesscom_url(url)
-    
     if not game_id:
-        return jsonify({"error": "Could not extract game ID from URL. Please check the format."}), 400
+        return Response('data: {"step":"error","error":"Could not extract game ID"}\n\n',
+                       mimetype="text/event-stream")
+
+    session_id = f"{game_id}_{int(time.time())}"
+
+    def generate_progress():
+        """Run analysis in background and stream progress."""
+        import queue
+        q = queue.Queue()
+        _analysis_progress[session_id] = q
+
+        def run_analysis():
+            try:
+                q.put({"step": "fetching", "message": "Fetching game from chess.com...", "progress": 10})
+                
+                pgn, metadata = fetch_chesscom_game(game_id, game_type)
+                q.put({"step": "stockfish", "message": "Running Stockfish analysis...", "progress": 30})
+
+                stockfish_evals = evaluate_with_stockfish(pgn, time_limit=0.1)
+                eval_count = len(stockfish_evals) if stockfish_evals else 0
+                q.put({"step": "stockfish_done", "message": f"Stockfish evaluated {eval_count} moves", "progress": 60})
+
+                q.put({"step": "llm", "message": "Generating AI commentary...", "progress": 70})
+
+                analysis_text = ""
+                try:
+                    analysis_text = _analyze_with_llm(pgn, metadata, stockfish_evals)
+                except Exception:
+                    pass
+
+                evaluations = stockfish_evals or []
+                q.put({"step": "finalizing", "message": "Preparing results...", "progress": 90})
+
+                # Parse board positions
+                board_positions = []
+                try:
+                    game = chess.pgn.read_game(io.StringIO(pgn))
+                    if game:
+                        board = game.board()
+                        for m in game.mainline_moves():
+                            san = board.san(m)
+                            board.push(m)
+                            board_positions.append({
+                                "uci": m.uci(), "san": san, "fen": board.fen()
+                            })
+                except Exception:
+                    pass
+
+                q.put({"step": "done", "progress": 100, "data": {
+                    "pgn": pgn,
+                    "analysis": analysis_text,
+                    "evaluations": evaluations,
+                    "metadata": metadata,
+                    "moves": board_positions
+                }})
+            except Exception as e:
+                q.put({"step": "error", "error": str(e)})
+
+        thread = threading.Thread(target=run_analysis)
+        thread.start()
+
+        # Stream progress
+        while True:
+            try:
+                msg = q.get(timeout=2)
+                yield f"data: {json.dumps(msg)}\n\n"
+                if msg.get("step") in ("done", "error"):
+                    break
+            except queue.Empty:
+                yield f"data: {{\"step\": \"waiting\"}}\n\n"
+                continue
+
+    return Response(stream_with_context(generate_progress()), 
+                    mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.route("/api/export-pgn", methods=["POST"])
+def export_pgn():
+    """Generate PGN with Stockfish evaluation comments."""
+    data = request.json
+    pgn = data.get("pgn", "")
+    evaluations = data.get("evaluations", [])
     
-    try:
-        pgn, metadata = fetch_chesscom_game(game_id, game_type)
-    except Exception as e:
-        return jsonify({"error": f"Failed to fetch game: {str(e)}"}), 400
+    if not pgn:
+        return jsonify({"error": "No PGN provided"}), 400
     
-    try:
-        # Use Stockfish for accurate move evaluations
-        stockfish_evals = evaluate_with_stockfish(pgn, time_limit=0.1)
-        
-        # Use LLM for commentary on critical moments only
-        analysis_text = ""
-        llm_evals = []
-        try:
-            analysis_text, llm_evals = _analyze_with_llm(pgn, metadata)
-        except Exception as e:
-            pass  # Continue without LLM analysis if it fails
-        
-        # Merge Stockfish evaluations with the moves
-        evaluations = stockfish_evals or []
-    except Exception as e:
-        return jsonify({"error": f"Failed to analyze game: {str(e)}"}), 500
-    
-    # Parse the game to get board positions for each move
-    board_positions = []
     try:
         game = chess.pgn.read_game(io.StringIO(pgn))
-        if game:
-            board = game.board()
-            for move in game.mainline_moves():
-                san = board.san(move)
-                board.push(move)
-                board_positions.append({
-                    "uci": move.uci(),
-                    "san": san,
-                    "fen": board.fen()
-                })
-    except Exception:
-        pass
-    
-    return jsonify({
-        "pgn": pgn,
-        "analysis": analysis_text,
-        "evaluations": evaluations,
-        "metadata": metadata,
-        "moves": board_positions
-    })
+        if not game:
+            return jsonify({"error": "Could not parse PGN"}), 400
+        
+        # Add Stockfish comments as NAGs and variations
+        board = game.board()
+        node = game
+        
+        for i, ev in enumerate(evaluations):
+            if i >= len(list(game.mainline_moves())):
+                break
+            
+            # Get the move
+            move_node = node.variation(0) if node.variations else None
+            if not move_node:
+                break
+            
+            move = move_node.move
+            
+            # Build comment
+            comment_parts = []
+            cat = ev.get("category", "")
+            reason = ev.get("reason", "")
+            score = ev.get("score", "")
+            best = ev.get("best_move", "")
+            
+            if cat and cat != "book":
+                comment_parts.append(f"{cat.upper()}: {reason}")
+            if score:
+                comment_parts.append(f"Score: {score}")
+            if best and cat in ("blunder", "mistake", "inaccuracy"):
+                comment_parts.append(f"Best: {best}")
+            
+            if comment_parts:
+                move_node.comment = " | ".join(comment_parts)
+            
+            # Add NAG (numeric annotation glyph)
+            if cat == "blunder":
+                move_node.nags.add(4)  # ?? blunder
+            elif cat == "mistake":
+                move_node.nags.add(2)  # ? mistake
+            elif cat == "inaccuracy":
+                move_node.nags.add(6)  # ?! inaccuracy
+            elif cat == "excellent":
+                move_node.nags.add(1)  # ! good move
+            elif cat == "brilliant":
+                move_node.nags.add(3)  # !! brilliant
+            
+            board.push(move)
+            node = move_node
+        
+        # Export with comments
+        exporter = chess.pgn.StringExporter(headers=True, variations=True, comments=True)
+        pgn_with_comments = game.accept(exporter)
+        
+        from flask import Response
+        return Response(
+            pgn_with_comments,
+            mimetype="application/x-chess-pgn",
+            headers={"Content-Disposition": "attachment; filename=chess_analysis.pgn"}
+        )
+    except Exception as e:
+        return jsonify({"error": f"Failed to export PGN: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
