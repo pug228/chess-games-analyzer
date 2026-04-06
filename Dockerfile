@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install Stockfish chess engine
+# Install Stockfish (v16+ with NNUE neural network evaluation)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends stockfish && \
     rm -rf /var/lib/apt/lists/* && \

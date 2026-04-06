@@ -231,23 +231,39 @@
             grid-template-rows: repeat(8, 1fr);
             border: 3px solid #3a3a5c;
             border-radius: 4px;
+            position: relative;
         }
         
         .square {
             display: flex; align-items: center; justify-content: center;
-            font-size: 40px;
             position: relative;
             user-select: none;
         }
         .square.light { background: #f0d9b5; }
         .square.dark { background: #b58863; }
         
-        .piece {
+        /* Pieces overlay with smooth transitions */
+        #piecesLayer {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
+        .piece-marker {
+            position: absolute;
+            width: 12.5%; height: 12.5%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 40px;
             line-height: 1;
+            transition: left 0.3s ease, top 0.3s ease, opacity 0.2s ease;
             text-shadow: 0 1px 2px rgba(0,0,0,0.3);
         }
-        .piece.white-piece { color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 2px rgba(0,0,0,0.5); }
-        .piece.black-piece { color: #1a1a1a; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .piece-marker.white-piece { color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 2px rgba(0,0,0,0.5); }
+        .piece-marker.black-piece { color: #1a1a1a; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        .piece-marker.piece-new { animation: pieceAppear 0.25s ease; }
+        @keyframes pieceAppear {
+            from { transform: scale(0.4); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
         
         /* Evaluation Badges */
         .eval-badge {
@@ -424,7 +440,9 @@
                         </div>
                     </div>
                     <div>
-                        <div id="board"></div>
+                        <div id="board">
+                            <div id="piecesLayer"></div>
+                        </div>
                         <div class="move-controls">
                             <button class="btn-move" id="startBtn" title="Start">⏮</button>
                             <button class="btn-move" id="prevBtn" title="Previous">◀</button>
@@ -478,30 +496,117 @@
             return board;
         }
         
-        // Render board from FEN
+        // Board state for smooth transitions
+        let boardInitialized = false;
+        let currentPieces = {}; // Map: "r-c" -> {piece, el}
+        
+        // Render board from FEN with smooth piece transitions
         function renderBoard(fen) {
             const board = fenToBoard(fen);
             const boardEl = document.getElementById('board');
-            boardEl.innerHTML = '';
+            const layer = document.getElementById('piecesLayer');
+            
+            // Initialize squares once (they never change)
+            if (!boardInitialized) {
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        const sq = document.createElement('div');
+                        const isLight = (r + c) % 2 === 0;
+                        sq.className = 'square ' + (isLight ? 'light' : 'dark');
+                        sq.dataset.row = r;
+                        sq.dataset.col = c;
+                        boardEl.insertBefore(sq, layer);
+                    }
+                }
+                boardInitialized = true;
+            }
+            
+            // Build new piece positions
+            const newPieces = {};
             
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
-                    const sq = document.createElement('div');
-                    const isLight = (r + c) % 2 === 0;
-                    sq.className = 'square ' + (isLight ? 'light' : 'dark');
-                    
+                    const key = r + '-' + c;
                     const piece = board[r][c];
-                    if (piece && PIECES[piece]) {
-                        const span = document.createElement('span');
-                        span.className = 'piece';
-                        span.classList.add(piece === piece.toUpperCase() ? 'white-piece' : 'black-piece');
-                        span.textContent = PIECES[piece];
-                        sq.appendChild(span);
-                    }
                     
-                    boardEl.appendChild(sq);
+                    if (piece && PIECES[piece]) {
+                        newPieces[key] = { piece: piece, r: r, c: c };
+                        
+                        if (currentPieces[key] && currentPieces[key].piece === piece) {
+                            // Same piece stays — no change needed
+                        } else if (currentPieces[key] && currentPieces[key].piece !== piece) {
+                            // Different piece on same square (promotion etc)
+                            updatePieceEl(currentPieces[key].el, piece, r, c);
+                            currentPieces[key].el.classList.add('piece-new');
+                            setTimeout(function(el) { el.classList.remove('piece-new'); }.bind(null, currentPieces[key].el), 300);
+                            currentPieces[key].piece = piece;
+                        } else {
+                            // New piece appeared — animate in
+                            const el = createPieceEl(piece, r, c);
+                            el.classList.add('piece-new');
+                            layer.appendChild(el);
+                            currentPieces[key] = { piece: piece, el: el };
+                        }
+                    } else if (currentPieces[key]) {
+                        // Piece was removed — animate out
+                        var oldEl = currentPieces[key].el;
+                        oldEl.style.opacity = '0';
+                        oldEl.style.transform = 'scale(0.3)';
+                        (function(el) { setTimeout(function() { el.remove(); }, 250); })(oldEl);
+                        delete currentPieces[key];
+                    }
                 }
             }
+            
+            // Move pieces that changed position
+            for (const key in currentPieces) {
+                const pData = currentPieces[key];
+                // Check if this piece moved to a different square
+                const newKey = pData.r + '-' + pData.c;
+                if (key !== newKey && !newPieces[key]) {
+                    // This piece moved — update its key and position
+                    const targetR = findPieceTarget(pData.piece, key, newPieces);
+                    if (targetR !== null) {
+                        // Update position
+                        updatePiecePosition(pData.el, targetR.r, targetR.c);
+                        // Update map
+                        const newKey2 = targetR.r + '-' + targetR.c;
+                        delete currentPieces[key];
+                        currentPieces[newKey2] = { piece: pData.piece, el: pData.el };
+                    }
+                }
+            }
+        }
+        
+        function findPieceTarget(piece, fromKey, newPieces) {
+            // Find where this piece went
+            for (const key in newPieces) {
+                if (newPieces[key].piece === piece && !currentPieces[key]) {
+                    return newPieces[key];
+                }
+            }
+            return null;
+        }
+        
+        function createPieceEl(piece, r, c) {
+            const el = document.createElement('div');
+            el.className = 'piece-marker ' + (piece === piece.toUpperCase() ? 'white-piece' : 'black-piece');
+            el.textContent = PIECES[piece];
+            el.style.left = (c * 12.5) + '%';
+            el.style.top = (r * 12.5) + '%';
+            return el;
+        }
+        
+        function updatePieceEl(el, piece, r, c) {
+            el.textContent = PIECES[piece];
+            el.className = 'piece-marker ' + (piece === piece.toUpperCase() ? 'white-piece' : 'black-piece');
+            el.style.left = (c * 12.5) + '%';
+            el.style.top = (r * 12.5) + '%';
+        }
+        
+        function updatePiecePosition(el, r, c) {
+            el.style.left = (c * 12.5) + '%';
+            el.style.top = (r * 12.5) + '%';
         }
         
         // State
@@ -673,11 +778,18 @@
         
         function goToStart() {
             currentMoveIndex = -1;
+            clearPieces();
             renderBoard(startFen);
             updateMoveInfo();
             updateControls();
             renderMoveList();
             updateEvalBar();
+        }
+        
+        function clearPieces() {
+            const layer = document.getElementById('piecesLayer');
+            if (layer) layer.innerHTML = '';
+            currentPieces = {};
         }
         
         function goToPrev() {
@@ -1115,18 +1227,135 @@
         }
         
         function formatAnalysis(text) {
-            if (text === null || text === undefined || text === '') {
+            if (!text || typeof text !== 'string' || text.trim() === '') {
                 return '<em style="color:#888;">No LLM analysis available. Stockfish evaluations are shown below the board.</em>';
             }
-            var str = String(text);
-            return str.split('\n').map(function(line) {
-                if (line.indexOf('# ') === 0) return '<h3>' + line.substring(2) + '</h3>';
-                if (line.indexOf('## ') === 0) return '<h4>' + line.substring(3) + '</h4>';
-                if (line.indexOf('- ') === 0 || line.indexOf('* ') === 0) return '<div style="margin-left:20px;">\u2022 ' + line.substring(2) + '</div>';
-                if (/^\d+\./.test(line)) return '<strong>' + line + '</strong>';
-                if (line.trim() === '') return '<br>';
-                return line;
-            }).join('\n');
+            var html = '<div style="line-height:1.8;">';
+            var lines = text.split('\n');
+            var i = 0;
+            
+            while (i < lines.length) {
+                var line = lines[i];
+                var trimmed = line.trim();
+                
+                // Empty line
+                if (trimmed === '') {
+                    html += '<br>';
+                    i++;
+                    continue;
+                }
+                
+                // Horizontal rule: --- or ***
+                if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
+                    html += '<hr style="border:none;border-top:1px solid #3a3a5c;margin:12px 0;">';
+                    i++;
+                    continue;
+                }
+                
+                // Detect markdown table: line starts with |
+                if (trimmed.indexOf('|') === 0) {
+                    var tableLines = [];
+                    while (i < lines.length && lines[i].trim().indexOf('|') === 0) {
+                        tableLines.push(lines[i].trim());
+                        i++;
+                    }
+                    html += renderMarkdownTable(tableLines);
+                    continue;
+                }
+                
+                // Headings: #### ## #
+                var headingMatch = trimmed.match(/^(#{1,6})\s+(.*)/);
+                if (headingMatch) {
+                    var level = headingMatch[1].length;
+                    var htext = inlineFormat(headingMatch[2]);
+                    var tag = level <= 3 ? 'h3' : (level <= 4 ? 'h4' : 'h5');
+                    var size = level === 1 ? '28px' : (level === 2 ? '24px' : (level === 3 ? '20px' : '17px'));
+                    html += '<' + tag + ' style="color:#6c63ff;margin:16px 0 8px;font-size:' + size + ';">' + htext + '</' + tag + '>';
+                    i++;
+                    continue;
+                }
+                
+                // Bullet list items: - or *
+                if (trimmed.indexOf('- ') === 0 || trimmed.indexOf('* ') === 0) {
+                    html += '<div style="margin:4px 0 4px 12px;">\u2022 ' + inlineFormat(trimmed.substring(2)) + '</div>';
+                    i++;
+                    continue;
+                }
+                
+                // Numbered list items
+                if (/^\d+\.\s/.test(trimmed)) {
+                    html += '<div style="margin:6px 0 2px;font-weight:600;">' + inlineFormat(trimmed) + '</div>';
+                    i++;
+                    continue;
+                }
+                
+                // Regular paragraph
+                html += '<p style="margin:6px 0;">' + inlineFormat(trimmed) + '</p>';
+                i++;
+            }
+            
+            html += '</div>';
+            return html;
+        }
+        
+        function renderMarkdownTable(tableLines) {
+            if (tableLines.length < 2) return '';
+            
+            var rows = [];
+            for (var i = 0; i < tableLines.length; i++) {
+                var line = tableLines[i].trim();
+                // Skip separator line: |---|---|
+                if (/^\|[\s\-:|]+\|$/.test(line)) continue;
+                
+                // Parse cells
+                var cells = line.split('|');
+                cells.shift(); // remove empty first
+                cells.pop();   // remove empty last
+                
+                for (var j = 0; j < cells.length; j++) {
+                    cells[j] = inlineFormat(cells[j].trim());
+                }
+                rows.push(cells);
+            }
+            
+            if (rows.length === 0) return '';
+            
+            // Build HTML table
+            var tableHtml = '<div style="overflow-x:auto;margin:12px 0;"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+            
+            // Header row
+            tableHtml += '<thead><tr>';
+            for (var j = 0; j < rows[0].length; j++) {
+                tableHtml += '<th style="background:#6c63ff;color:#fff;padding:8px 10px;text-align:left;font-weight:600;border:1px solid #5a53de;">' + rows[0][j] + '</th>';
+            }
+            tableHtml += '</tr></thead>';
+            
+            // Body rows
+            tableHtml += '<tbody>';
+            for (var r = 1; r < rows.length; r++) {
+                var bg = r % 2 === 0 ? '#1a1a2e' : '#222244';
+                tableHtml += '<tr style="background:' + bg + ';">';
+                for (var j = 0; j < rows[r].length; j++) {
+                    tableHtml += '<td style="padding:8px 10px;border:1px solid #3a3a5c;vertical-align:top;">' + rows[r][j] + '</td>';
+                }
+                tableHtml += '</tr>';
+            }
+            tableHtml += '</tbody></table></div>';
+            
+            return tableHtml;
+        }
+        
+        function inlineFormat(text) {
+            if (!text) return '';
+            // Bold: **text** or __text__
+            text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+            // Italic: *text* or _text_
+            text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            text = text.replace(/(?<!\w)_(.+?)_(?!\w)/g, '<em>$1</em>');
+            // Code: `text`
+            text = text.replace(/`([^`]+)`/g, '<code style="background:#2a2a4a;padding:2px 6px;border-radius:3px;font-size:0.9em;">$1</code>');
+            return text;
         }
         
         // Init

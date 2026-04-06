@@ -280,6 +280,12 @@ def evaluate_with_stockfish(pgn, time_limit=0.5):
         board = game.board()
         
         with chess.engine.SimpleEngine.popen_uci(stockfish_path) as engine:
+            # Configure engine for maximum strength
+            try:
+                engine.configure({"Threads": 4, "Hash": 256, "MultiPV": 1})
+            except Exception:
+                pass  # Not all engines support these options
+            
             for move in game.mainline_moves():
                 side_to_move = board.turn
                 
@@ -657,7 +663,7 @@ def analyze_stream():
                 pgn, metadata = fetch_chesscom_game(game_id, game_type)
                 q.put({"step": "stockfish", "message": "Running Stockfish analysis...", "progress": 30})
 
-                stockfish_evals = evaluate_with_stockfish(pgn, time_limit=0.1)
+                stockfish_evals = evaluate_with_stockfish(pgn, time_limit=0.5)
                 eval_count = len(stockfish_evals) if stockfish_evals else 0
                 q.put({"step": "stockfish_done", "message": f"Stockfish evaluated {eval_count} moves", "progress": 60})
 
