@@ -93,7 +93,8 @@
       "Bash(result *)",
       "Bash(engine.quit)",
       "Bash(which *)",
-      "Bash(cp *)"
+      "Bash(cp *)",
+      "Bash(git rm *)"
     ]
   },
   "$version": 3

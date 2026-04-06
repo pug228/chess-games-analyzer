@@ -6,14 +6,11 @@
 
 ## 📸 Demo
 
-### Board Analysis — Dark Mode
-![Board & Analysis](docs/screenshots/board.png)
+### Board Analysis
+![Board Analysis](docs/screenshots/board.png)
 
-### Evaluation Bar & Move List
-![Evaluation Bar](docs/screenshots/eval-bar.png)
-
-### Light Mode
-![Light Mode](docs/screenshots/light-mode.png)
+### Analysis History
+![Analysis History](docs/screenshots/eval-bar.png)
 
 ---
 
